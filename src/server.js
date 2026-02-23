@@ -12,7 +12,7 @@ const startServer = async () => {
     await pool.query('SELECT NOW()');
     logger.info('Database connection established successfully');
 
-    const server = app.listen(config.port, () => {
+    const server = app.listen(config.port, '0.0.0.0', () => {
       logger.info(`Server running on port ${config.port} in ${config.nodeEnv} mode`);
       logger.info(`Health check available at http://localhost:${config.port}/health`);
       logger.info(`API documentation at http://localhost:${config.port}/api`);
