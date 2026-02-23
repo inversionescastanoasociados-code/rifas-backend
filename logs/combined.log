@@ -13540,3 +13540,6 @@
 {"level":"info","message":"[AUTO] 3 boletas bloqueadas liberadas (sin cliente)","service":"rifas-backend","timestamp":"2026-02-23T20:49:43.565Z"}
 {"level":"info","message":"[AUTO] 0 reservas formales liberadas y desvinculadas","service":"rifas-backend","timestamp":"2026-02-23T20:49:43.566Z"}
 {"bloqueos_liberados":3,"level":"info","message":"[JOB RESULT] Boleta expiration check:","reservas_liberadas":0,"service":"rifas-backend","timestamp":"2026-02-23T20:49:43.569Z","total":3}
+{"level":"info","message":"Connected to PostgreSQL database","service":"rifas-backend","timestamp":"2026-02-23T20:54:43.554Z"}
+{"level":"info","message":"[AUTO] 0 boletas bloqueadas liberadas (sin cliente)","service":"rifas-backend","timestamp":"2026-02-23T20:54:43.562Z"}
+{"level":"info","message":"[AUTO] 0 reservas formales liberadas y desvinculadas","service":"rifas-backend","timestamp":"2026-02-23T20:54:43.563Z"}
