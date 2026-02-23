@@ -5,11 +5,11 @@ const config = {
   nodeEnv: process.env.NODE_ENV || 'development',
   
   database: {
-    host: process.env.DB_HOST || 'localhost',
+    host: process.env.DB_HOST || 'postgres.railway.internal',
     port: process.env.DB_PORT || 5432,
-    name: process.env.DB_NAME || 'rifas',
+    name: process.env.DB_NAME || 'railway',
     user: process.env.DB_USER || 'postgres',
-    password: process.env.DB_PASSWORD || 'stiven2808'
+    password: process.env.DB_PASSWORD || 'iaciJSTYwwNzAHVXWsGdQCblXdvbcuDJ'
   },
   
   jwt: {
