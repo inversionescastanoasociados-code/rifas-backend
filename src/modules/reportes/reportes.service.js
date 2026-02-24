@@ -14,6 +14,32 @@ const getReporteRifa = async (rifaId) => {
   const serie = await query(SQL.GET_SERIE_DIARIA, [rifaId]);
   const metodos = await query(SQL.GET_METODOS_PAGO, [rifaId]);
 
+  // NUEVO: calcular total abonado y deuda de boletas ABONADAS
+  const abonadoAbonadasQ = `
+    SELECT COALESCE(SUM(a.monto), 0) AS abonado_abonadas
+    FROM abonos a
+    INNER JOIN boletas b ON b.id = a.boleta_id
+    INNER JOIN ventas v ON v.id = a.venta_id
+    WHERE v.rifa_id = $1
+      AND b.estado = 'ABONADA'
+      AND a.estado = 'CONFIRMADO'
+  `;
+  const deudaAbonadasQ = `
+    SELECT COALESCE(SUM(r.precio_boleta - ab.total_abonado), 0) AS deuda_abonadas
+    FROM boletas b
+    INNER JOIN rifas r ON r.id = b.rifa_id
+    LEFT JOIN (
+      SELECT boleta_id, SUM(monto) AS total_abonado
+      FROM abonos
+      WHERE estado = 'CONFIRMADO'
+      GROUP BY boleta_id
+    ) ab ON ab.boleta_id = b.id
+    WHERE b.rifa_id = $1
+      AND b.estado = 'ABONADA'
+  `;
+  const abonadoAbonadas = await query(abonadoAbonadasQ, [rifaId]);
+  const deudaAbonadas = await query(deudaAbonadasQ, [rifaId]);
+
   const r = rifa.rows[0];
   const rec = recaudo.rows[0];
 
@@ -28,7 +54,9 @@ const getReporteRifa = async (rifaId) => {
     finanzas: {
       recaudo_real: Number(rec.recaudo_real),
       proyeccion_total: Number(r.proyeccion_total),
-      porcentaje_cumplimiento: Number(porcentajeCumplimiento.toFixed(2))
+      porcentaje_cumplimiento: Number(porcentajeCumplimiento.toFixed(2)),
+      abonado_abonadas: Number(abonadoAbonadas.rows[0].abonado_abonadas),
+      deuda_abonadas: Number(deudaAbonadas.rows[0].deuda_abonadas)
     },
     serie_diaria: serie.rows,
     metodos_pago: metodos.rows
