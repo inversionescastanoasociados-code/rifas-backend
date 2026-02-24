@@ -33,31 +33,20 @@ const SQL_QUERIES = {
     WHERE rifa_id = $1
   `,
 
-  /* Boletas que cambiaron de estado dentro del periodo */
+  /* Boletas vendidas dentro del periodo basado en ventas.created_at */
   GET_BOLETAS_PERIODO: `
     SELECT
-      COUNT(*) FILTER (WHERE b.estado != 'DISPONIBLE'
-        AND ($2::timestamptz IS NULL OR b.updated_at >= $2::timestamptz)
-        AND ($3::timestamptz IS NULL OR b.updated_at < ($3::timestamptz + interval '1 day'))
-      ) AS vendidas_periodo,
-      COUNT(*) FILTER (WHERE b.estado = 'PAGADA'
-        AND ($2::timestamptz IS NULL OR b.updated_at >= $2::timestamptz)
-        AND ($3::timestamptz IS NULL OR b.updated_at < ($3::timestamptz + interval '1 day'))
-      ) AS pagadas_periodo,
-      COUNT(*) FILTER (WHERE b.estado = 'RESERVADA'
-        AND ($2::timestamptz IS NULL OR b.updated_at >= $2::timestamptz)
-        AND ($3::timestamptz IS NULL OR b.updated_at < ($3::timestamptz + interval '1 day'))
-      ) AS reservadas_periodo,
-      COUNT(*) FILTER (WHERE b.estado = 'ABONADA'
-        AND ($2::timestamptz IS NULL OR b.updated_at >= $2::timestamptz)
-        AND ($3::timestamptz IS NULL OR b.updated_at < ($3::timestamptz + interval '1 day'))
-      ) AS abonadas_periodo,
-      COUNT(*) FILTER (WHERE b.estado = 'ANULADA'
-        AND ($2::timestamptz IS NULL OR b.updated_at >= $2::timestamptz)
-        AND ($3::timestamptz IS NULL OR b.updated_at < ($3::timestamptz + interval '1 day'))
-      ) AS anuladas_periodo
+      COUNT(*) AS vendidas_periodo,
+      COUNT(*) FILTER (WHERE b.estado = 'PAGADA') AS pagadas_periodo,
+      COUNT(*) FILTER (WHERE b.estado = 'RESERVADA') AS reservadas_periodo,
+      COUNT(*) FILTER (WHERE b.estado = 'ABONADA') AS abonadas_periodo,
+      COUNT(*) FILTER (WHERE b.estado = 'ANULADA') AS anuladas_periodo
     FROM boletas b
+    INNER JOIN ventas v ON v.id = b.venta_id
     WHERE b.rifa_id = $1
+      AND b.estado != 'DISPONIBLE'
+      AND ($2::timestamptz IS NULL OR v.created_at >= $2::timestamptz)
+      AND ($3::timestamptz IS NULL OR v.created_at < ($3::timestamptz + interval '1 day'))
   `,
 
   GET_RECAUDO_REAL: `

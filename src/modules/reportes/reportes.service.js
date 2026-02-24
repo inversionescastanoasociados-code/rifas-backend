@@ -15,12 +15,9 @@ const getReporteRifa = async (rifaId, fechaInicio = null, fechaFin = null) => {
   // 2. Estado ACTUAL de boletas (siempre sin filtro de fecha - snapshot actual)
   const boletas = await query(SQL.GET_BOLETAS_RESUMEN, [rifaId]);
 
-  // 3. Boletas movidas en el periodo (solo si hay filtro)
-  let boletasPeriodo = null;
-  if (hayFiltroFecha) {
-    const bpRes = await query(SQL.GET_BOLETAS_PERIODO, params3);
-    boletasPeriodo = bpRes.rows[0];
-  }
+  // 3. Boletas del periodo (siempre se ejecuta; sin filtro = todo)
+  const bpRes = await query(SQL.GET_BOLETAS_PERIODO, params3);
+  const boletasPeriodo = bpRes.rows[0];
 
   // 4. Recaudo filtrado por periodo
   const recaudo = await query(SQL.GET_RECAUDO_REAL, params3);
@@ -83,14 +80,14 @@ const getReporteRifa = async (rifaId, fechaInicio = null, fechaFin = null) => {
   return {
     rifa: r,
     resumen_boletas: boletas.rows[0],
-    // Boletas del periodo (si hay filtro)
-    boletas_periodo: boletasPeriodo ? {
+    // Boletas del periodo
+    boletas_periodo: {
       vendidas: Number(boletasPeriodo.vendidas_periodo || 0),
       pagadas: Number(boletasPeriodo.pagadas_periodo || 0),
       reservadas: Number(boletasPeriodo.reservadas_periodo || 0),
       abonadas: Number(boletasPeriodo.abonadas_periodo || 0),
       anuladas: Number(boletasPeriodo.anuladas_periodo || 0),
-    } : null,
+    },
     finanzas: {
       recaudo_real: Number(rec.recaudo_real),
       recaudo_total: Number(recTotal.recaudo_total),
