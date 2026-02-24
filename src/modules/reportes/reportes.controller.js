@@ -3,7 +3,8 @@ const service = require('./reportes.service');
 const getReporteRifa = async (req, res) => {
   try {
     const { rifaId } = req.params;
-    const data = await service.getReporteRifa(rifaId);
+    const { fechaInicio, fechaFin } = req.query;
+    const data = await service.getReporteRifa(rifaId, fechaInicio || null, fechaFin || null);
     res.json(data);
   } catch (error) {
     console.error('[REPORTES ERROR]', error);
