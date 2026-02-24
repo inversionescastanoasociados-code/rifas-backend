@@ -224,15 +224,17 @@ class VentaService {
       const boletas = boletasResult.rows;
       const cantidadBoletas = boletas.length;
 
-      // 🔹 3️⃣ Validar medio de pago
+      // 🔹 3️⃣ Validar medio de pago y obtener nombre
       const medioPagoCheck = await tx.query(
-        `SELECT id FROM medios_pago WHERE id = $1`,
+        `SELECT id, nombre FROM medios_pago WHERE id = $1`,
         [medio_pago_id]
       );
 
       if (medioPagoCheck.rows.length === 0) {
         throw new Error('Medio de pago no válido');
       }
+
+      const gatewayPagoNombre = medioPagoCheck.rows[0].nombre || null;
 
       // 🔹 4️⃣ Calcular estado según pago
       const saldo_pendiente = monto_total - total_pagado;
@@ -248,10 +250,13 @@ class VentaService {
       await tx.query(
         `UPDATE ventas
          SET monto_total = $1,
-             estado_venta = $2,
+             abono_total = $2,
+             estado_venta = $3,
+             medio_pago_id = $4,
+             gateway_pago = $5,
              updated_at = CURRENT_TIMESTAMP
-         WHERE id = $3`,
-        [monto_total, nuevoEstado, ventaId]
+         WHERE id = $6`,
+        [monto_total, total_pagado, nuevoEstado, medio_pago_id, gatewayPagoNombre, ventaId]
       );
 
       // 🔹 6️⃣ Crear ABONOS por cada boleta
@@ -265,17 +270,19 @@ class VentaService {
             monto,
             estado,
             medio_pago_id,
+            gateway_pago,
             moneda,
             registrado_por,
             notas,
             created_at
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)`,
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)`,
           [
             ventaId,
             boleta.id,
             montoPorBoleta,
             'CONFIRMADO',
             medio_pago_id,
+            gatewayPagoNombre,
             'COP',
             venta.vendida_por,
             esAbono ? 'Abono inicial (convertida de reserva)' : 'Pago completo (convertida de reserva)'
@@ -451,31 +458,45 @@ class VentaService {
       const esPagoCompleto = total_pagado >= total_venta;
       const esAbono = total_pagado > 0 && total_pagado < total_venta;
 
-      // 🔹 4️⃣ Crear venta
+      // 🔹 3.5️⃣ Validar medio de pago y obtener nombre para gateway_pago
+      const medioPagoCheck = await tx.query(
+        `SELECT id, nombre FROM medios_pago WHERE id = $1`,
+        [medio_pago_id]
+      );
+
+      if (medioPagoCheck.rows.length === 0) {
+        throw new Error('Medio de pago no válido');
+      }
+
+      const medioPagoId = medio_pago_id || null;
+      const gatewayPagoNombre = medioPagoCheck.rows[0].nombre || null;
+
+      // 🔹 4️⃣ Determinar estado de la venta
+      let estadoVenta = 'PENDIENTE';
+      if (esPagoCompleto) {
+        estadoVenta = 'PAGADA';
+      } else if (esAbono) {
+        estadoVenta = 'ABONADA';
+      }
+
+      // 🔹 4️⃣ Crear venta (con medio_pago_id, vendedor_id, estado_venta)
       const ventaResult = await tx.query(
         `INSERT INTO ventas (
           rifa_id,
           cliente_id,
           monto_total,
+          abono_total,
+          estado_venta,
+          medio_pago_id,
+          vendedor_id,
+          gateway_pago,
           created_at
-        ) VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
         RETURNING *`,
-        [rifa_id, clienteId, total_venta]
+        [rifa_id, clienteId, total_venta, total_pagado || 0, estadoVenta, medioPagoId, vendida_por, gatewayPagoNombre]
       );
 
       const venta = ventaResult.rows[0];
-
-      const medioPagoCheck = await tx.query(
-  `SELECT id FROM medios_pago WHERE id = $1`,
-  [medio_pago_id]
-);
-
-if (medioPagoCheck.rows.length === 0) {
-  throw new Error('Medio de pago no válido');
-}
-
-
-      const medioPagoId = medio_pago_id || null;
 
 
       // 🔹 Calcular monto por boleta
@@ -527,17 +548,19 @@ if (medioPagoCheck.rows.length === 0) {
               registrado_por,
               boleta_id,
               medio_pago_id,
+              gateway_pago,
               monto,
               moneda,
               estado,
               notas,
               created_at
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,CURRENT_TIMESTAMP)`,
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,CURRENT_TIMESTAMP)`,
             [
               venta.id,
               vendida_por,
               id,
               medioPagoId,
+              gatewayPagoNombre,
               montoPorBoleta,
               'COP',
               'CONFIRMADO',
@@ -833,6 +856,18 @@ if (medioPagoCheck.rows.length === 0) {
       throw new Error('El monto excede el saldo pendiente');
     }
 
+    // 2.5) Obtener nombre del medio de pago para gateway_pago
+    let gatewayPagoNombre = null;
+    if (medioPagoId) {
+      const medioPagoCheck = await tx.query(
+        `SELECT nombre FROM medios_pago WHERE id = $1`,
+        [medioPagoId]
+      );
+      if (medioPagoCheck.rows.length > 0) {
+        gatewayPagoNombre = medioPagoCheck.rows[0].nombre;
+      }
+    }
+
     // 3) Obtener boletas de la venta
     const boletasResult = await tx.query(
       `SELECT id FROM boletas WHERE venta_id = $1`,
@@ -856,17 +891,19 @@ if (medioPagoCheck.rows.length === 0) {
           monto,
           estado,
           medio_pago_id,
+          gateway_pago,
           moneda,
           registrado_por,
           notas,
           created_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)`,
         [
           ventaId,
           boleta.id,
           montoPorBoleta,
           'CONFIRMADO',
           medioPagoId,
+          gatewayPagoNombre,
           moneda || 'COP',
           userId,
           notas || null
