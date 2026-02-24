@@ -225,6 +225,32 @@ class ClienteController {
       });
     }
   }
+  async getClienteDetalle(req, res) {
+    try {
+      const { id } = req.params;
+      
+      const detalle = await clienteService.getClienteDetalle(id);
+      
+      if (!detalle) {
+        return res.status(404).json({
+          success: false,
+          message: 'Cliente not found'
+        });
+      }
+      
+      res.status(200).json({
+        success: true,
+        data: detalle
+      });
+    } catch (error) {
+      logger.error('Error in getClienteDetalle controller:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error getting client detail',
+        error: error.message
+      });
+    }
+  }
 }
 
 module.exports = new ClienteController();

@@ -71,6 +71,14 @@ router.get('/cedula/:cedula',
   clienteController.getClienteByCedula
 );
 
+// GET /api/clientes/:id/detalle - Obtener detalle completo del cliente con boletas y deudas
+router.get('/:id/detalle', 
+  authenticateToken, 
+  authorize(['SUPER_ADMIN', 'ADMIN', 'VENDEDOR']), 
+  validateParams(idSchema), 
+  clienteController.getClienteDetalle
+);
+
 // GET /api/clientes/:id - Obtener cliente por ID
 router.get('/:id', 
   authenticateToken, 

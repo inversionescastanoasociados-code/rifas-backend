@@ -139,10 +139,10 @@ class ClienteService {
       if (search) {
         paramCount++;
         whereClause = `
-    WHERE nombre ILIKE $${paramCount}
-       OR email ILIKE $${paramCount}
-       OR telefono ILIKE $${paramCount}
-       OR identificacion ILIKE $${paramCount}
+    WHERE c.nombre ILIKE $${paramCount}
+       OR c.email ILIKE $${paramCount}
+       OR c.telefono ILIKE $${paramCount}
+       OR c.identificacion ILIKE $${paramCount}
   `;
         queryParams.push(`%${search}%`);
       }
@@ -150,7 +150,7 @@ class ClienteService {
       // Contar total
       const countQuery = `
         SELECT COUNT(*) as total
-        FROM clientes
+        FROM clientes c
         ${whereClause}
       `;
       const countResult = await query(countQuery, queryParams);
@@ -164,10 +164,28 @@ class ClienteService {
       queryParams.push(offset);
       
       const selectQuery = `
-        SELECT id, nombre, telefono, email, identificacion, direccion, created_at, updated_at
-        FROM clientes
+        SELECT 
+          c.id, c.nombre, c.telefono, c.email, c.identificacion, c.direccion, c.created_at, c.updated_at,
+          COALESCE(bs.total_boletas, 0)::int AS total_boletas,
+          COALESCE(bs.pagadas, 0)::int AS boletas_pagadas,
+          COALESCE(bs.reservadas, 0)::int AS boletas_reservadas,
+          COALESCE(bs.abonadas, 0)::int AS boletas_abonadas,
+          COALESCE(bs.deuda_total, 0)::numeric AS deuda_total
+        FROM clientes c
+        LEFT JOIN LATERAL (
+          SELECT 
+            COUNT(*) AS total_boletas,
+            COUNT(*) FILTER (WHERE b.estado = 'PAGADA') AS pagadas,
+            COUNT(*) FILTER (WHERE b.estado = 'RESERVADA') AS reservadas,
+            COUNT(*) FILTER (WHERE b.estado = 'ABONADA') AS abonadas,
+            COALESCE(SUM(CASE WHEN b.estado IN ('RESERVADA','ABONADA') THEN COALESCE(vd.saldo_pendiente, r.precio_boleta) ELSE 0 END), 0) AS deuda_total
+          FROM boletas b
+          JOIN rifas r ON b.rifa_id = r.id
+          LEFT JOIN venta_detalles vd ON vd.boleta_id = b.id
+          WHERE b.cliente_id = c.id
+        ) bs ON true
         ${whereClause}
-        ORDER BY created_at DESC
+        ORDER BY c.created_at DESC
         LIMIT $${paramCount - 1} OFFSET $${paramCount}
       `;
       
@@ -182,6 +200,155 @@ class ClienteService {
       
     } catch (error) {
       logger.error('Error in getAllClientes service:', error);
+      throw error;
+    }
+  }
+
+  async getClienteDetalle(id) {
+    try {
+      // 1. Get client info
+      const clienteResult = await query(`
+        SELECT id, nombre, telefono, email, identificacion, direccion, created_at, updated_at
+        FROM clientes WHERE id = $1
+      `, [id]);
+
+      if (clienteResult.rows.length === 0) return null;
+      const cliente = clienteResult.rows[0];
+
+      // 2. Get all boletas of this client with rifa info and financial data
+      const boletasResult = await query(`
+        SELECT 
+          b.id AS boleta_id,
+          b.numero,
+          b.estado,
+          b.created_at AS boleta_created_at,
+          b.updated_at AS boleta_updated_at,
+          r.id AS rifa_id,
+          r.nombre AS rifa_nombre,
+          r.precio_boleta,
+          r.estado AS rifa_estado,
+          r.imagen_url AS rifa_imagen,
+          v.id AS venta_id,
+          v.estado_venta,
+          v.monto_total AS venta_monto_total,
+          v.abono_total AS venta_abono_total,
+          v.saldo_pendiente AS venta_saldo_pendiente,
+          COALESCE(vd.precio_unitario, r.precio_boleta) AS precio_unitario,
+          COALESCE(vd.abono, 0) AS abono_boleta,
+          COALESCE(vd.saldo_pendiente, r.precio_boleta) AS saldo_boleta
+        FROM boletas b
+        JOIN rifas r ON b.rifa_id = r.id
+        LEFT JOIN ventas v ON b.venta_id = v.id
+        LEFT JOIN venta_detalles vd ON vd.boleta_id = b.id AND vd.venta_id = v.id
+        WHERE b.cliente_id = $1
+        ORDER BY r.nombre, b.numero
+      `, [id]);
+
+      // 3. Get abonos history for this client
+      const abonosResult = await query(`
+        SELECT 
+          a.id AS abono_id,
+          a.monto,
+          a.estado,
+          a.referencia,
+          a.notas,
+          a.created_at AS abono_fecha,
+          a.gateway_pago,
+          mp.nombre AS medio_pago_nombre,
+          r.nombre AS rifa_nombre,
+          b.numero AS boleta_numero,
+          v.id AS venta_id
+        FROM abonos a
+        JOIN ventas v ON a.venta_id = v.id
+        LEFT JOIN medios_pago mp ON a.medio_pago_id = mp.id
+        LEFT JOIN boletas b ON a.boleta_id = b.id
+        LEFT JOIN rifas r ON v.rifa_id = r.id
+        WHERE v.cliente_id = $1
+        ORDER BY a.created_at DESC
+        LIMIT 50
+      `, [id]);
+
+      // 4. Build summary
+      const boletas = boletasResult.rows;
+      const totalBoletas = boletas.length;
+      const boletasPagadas = boletas.filter(b => b.estado === 'PAGADA').length;
+      const boletasReservadas = boletas.filter(b => b.estado === 'RESERVADA').length;
+      const boletasAbonadas = boletas.filter(b => b.estado === 'ABONADA').length;
+      const boletasAnuladas = boletas.filter(b => b.estado === 'ANULADA').length;
+
+      const totalDeuda = boletas.reduce((sum, b) => {
+        if (['RESERVADA', 'ABONADA'].includes(b.estado)) {
+          return sum + parseFloat(b.saldo_boleta || 0);
+        }
+        return sum;
+      }, 0);
+
+      const totalAbonado = boletas.reduce((sum, b) => {
+        return sum + parseFloat(b.abono_boleta || 0);
+      }, 0);
+
+      const totalPagado = boletas.reduce((sum, b) => {
+        if (b.estado === 'PAGADA') {
+          return sum + parseFloat(b.precio_unitario || 0);
+        }
+        return sum;
+      }, 0);
+
+      // 5. Group boletas by rifa
+      const rifasMap = {};
+      boletas.forEach(b => {
+        if (!rifasMap[b.rifa_id]) {
+          rifasMap[b.rifa_id] = {
+            rifa_id: b.rifa_id,
+            rifa_nombre: b.rifa_nombre,
+            rifa_estado: b.rifa_estado,
+            rifa_imagen: b.rifa_imagen,
+            precio_boleta: parseFloat(b.precio_boleta),
+            boletas: [],
+            resumen: { total: 0, pagadas: 0, reservadas: 0, abonadas: 0, anuladas: 0, deuda: 0, abonado: 0 }
+          };
+        }
+        const rifa = rifasMap[b.rifa_id];
+        rifa.boletas.push({
+          boleta_id: b.boleta_id,
+          numero: b.numero,
+          estado: b.estado,
+          precio_unitario: parseFloat(b.precio_unitario),
+          abono: parseFloat(b.abono_boleta),
+          saldo: parseFloat(b.saldo_boleta),
+          venta_id: b.venta_id,
+          estado_venta: b.estado_venta,
+          created_at: b.boleta_created_at
+        });
+        rifa.resumen.total++;
+        if (b.estado === 'PAGADA') rifa.resumen.pagadas++;
+        if (b.estado === 'RESERVADA') rifa.resumen.reservadas++;
+        if (b.estado === 'ABONADA') rifa.resumen.abonadas++;
+        if (b.estado === 'ANULADA') rifa.resumen.anuladas++;
+        if (['RESERVADA', 'ABONADA'].includes(b.estado)) {
+          rifa.resumen.deuda += parseFloat(b.saldo_boleta || 0);
+        }
+        rifa.resumen.abonado += parseFloat(b.abono_boleta || 0);
+      });
+
+      return {
+        cliente,
+        resumen: {
+          total_boletas: totalBoletas,
+          pagadas: boletasPagadas,
+          reservadas: boletasReservadas,
+          abonadas: boletasAbonadas,
+          anuladas: boletasAnuladas,
+          total_deuda: totalDeuda,
+          total_abonado: totalAbonado,
+          total_pagado: totalPagado
+        },
+        rifas: Object.values(rifasMap),
+        abonos: abonosResult.rows
+      };
+
+    } catch (error) {
+      logger.error('Error in getClienteDetalle service:', error);
       throw error;
     }
   }
