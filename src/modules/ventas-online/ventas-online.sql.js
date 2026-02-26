@@ -131,6 +131,7 @@ const SQL_QUERIES = {
    * - es_venta_online = true → aparece en dashboard admin automáticamente
    * - estado_venta = 'PENDIENTE' → admin debe aprobar
    * - expires_at = tiempo límite para que el cliente pague
+   * NOTA: saldo_pendiente es GENERATED ALWAYS (monto_total - abono_total), no se inserta
    */
   CREATE_RESERVA_ONLINE: `
     INSERT INTO ventas (
@@ -138,7 +139,6 @@ const SQL_QUERIES = {
       cliente_id,
       monto_total,
       abono_total,
-      saldo_pendiente,
       estado_venta,
       es_venta_online,
       medio_pago_id,
@@ -147,8 +147,8 @@ const SQL_QUERIES = {
       created_at,
       updated_at
     )
-    VALUES ($1, $2, $3, 0, $3, 'PENDIENTE', true, $4, $5, $6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-    RETURNING id, rifa_id, cliente_id, monto_total, estado_venta, expires_at, created_at
+    VALUES ($1, $2, $3, 0, 'PENDIENTE', true, $4, $5, $6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    RETURNING id, rifa_id, cliente_id, monto_total, saldo_pendiente, estado_venta, expires_at, created_at
   `,
 
   /**
@@ -214,7 +214,7 @@ const SQL_QUERIES = {
    * Obtener medios de pago activos.
    */
   GET_MEDIOS_PAGO: `
-    SELECT id, nombre, tipo, activo
+    SELECT id, nombre, descripcion, activo
     FROM medios_pago
     WHERE activo = true
     ORDER BY nombre ASC
