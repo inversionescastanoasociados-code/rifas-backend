@@ -76,13 +76,16 @@ class VerificarService {
         },
         cliente: boleta.cliente_info
           ? {
-              nombre: boleta.cliente_info.nombre,
+              nombre: boleta.cliente_info.nombre || '',
               // Enmascarar identificación por seguridad (mostrar solo últimos 4)
               identificacion: boleta.cliente_info.identificacion
                 ? '****' + boleta.cliente_info.identificacion.slice(-4)
                 : null,
             }
-          : null,
+          : {
+              nombre: null,
+              identificacion: null,
+            },
         financiero: boleta.venta_info
           ? {
               monto_total: parseFloat(boleta.venta_info.monto_total),
@@ -99,7 +102,14 @@ class VerificarService {
                     )
                   : 0,
             }
-          : null,
+          : {
+              monto_total: 0,
+              abono_total: 0,
+              saldo_pendiente: 0,
+              estado: null,
+              metodo_pago: null,
+              porcentaje_pagado: 0,
+            },
         abonos: abonos.map((a) => ({
           monto: parseFloat(a.monto),
           moneda: a.moneda,
