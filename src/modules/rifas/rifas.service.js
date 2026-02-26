@@ -3,6 +3,8 @@ const { beginTransaction } = require('../../db/tx');
 const SQL_QUERIES = require('./rifas.sql');
 const boletaService = require('../boletas/boletas.service');
 const logger = require('../../utils/logger');
+const crypto = require('crypto');
+const config = require('../../config/env');
 
 class RifaService {
   async createRifa(rifaData) {
@@ -156,57 +158,64 @@ class RifaService {
       }
       
       const { 
-        qr_base_url = 'https://rifas.com/boletas',
         imagen_url = null,
-        diseño_template = 'default'
+        diseño_template = 'default',
+        verificacion_base_url = process.env.FRONTEND_URL || 'https://rifas-frontend.vercel.app'
       } = boletaInfo;
       
-      let boletaQuery, boletaParams;
+      // Generar hashes HMAC-SHA256 únicos para cada boleta
+      const secret = config.verificacion?.secret || config.jwt.secret;
+      const startNum = rifa.total_boletas === 10000 ? 0 : 1;
+      const endNum = rifa.total_boletas === 10000 ? 9999 : rifa.total_boletas;
       
-      if (rifa.total_boletas === 10000) {
-        // Para 10000 boletas, generar de 0 a 9999 (4 cifras)
-        boletaQuery = `
-  INSERT INTO boletas (rifa_id, numero, estado, qr_url, barcode, imagen_url, created_at, updated_at)
-  SELECT 
-    $1::uuid as rifa_id, 
-    generate_series as numero, 
-    'DISPONIBLE',
-    'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' || $2,
-    'R' || SUBSTRING($1::text, 1, 4) || '-' || LPAD(generate_series::text, 4, '0'),    $3,
-    CURRENT_TIMESTAMP, 
-    CURRENT_TIMESTAMP
-  FROM generate_series(0, 9999)
-`;
-boletaParams = [rifaId, qr_base_url, imagen_url];
-      } else {
-        // Para otros casos, generar de 1 a total_boletas
-        boletaQuery = `
-  INSERT INTO boletas (rifa_id, numero, estado, qr_url, barcode, imagen_url, created_at, updated_at)
-  SELECT 
-    $1::uuid as rifa_id, 
-    generate_series as numero, 
-    'DISPONIBLE',
-    'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' || $3,
-    'R' || SUBSTRING($1::text, 1, 4) || '-' || LPAD(generate_series::text, 4, '0'),    $4,
-    CURRENT_TIMESTAMP, 
-    CURRENT_TIMESTAMP
-  FROM generate_series(1, $2)
-`;
-boletaParams = [rifaId, rifa.total_boletas, qr_base_url, imagen_url];
+      // Insertar boletas en lotes de 500 para no sobrecargar la memoria
+      const batchSize = 500;
+      let totalInserted = 0;
+      
+      for (let batchStart = startNum; batchStart <= endNum; batchStart += batchSize) {
+        const batchEnd = Math.min(batchStart + batchSize - 1, endNum);
+        
+        // Construir VALUES para el batch
+        const values = [];
+        const placeholders = [];
+        let paramIndex = 1;
+        
+        for (let num = batchStart; num <= batchEnd; num++) {
+          // Generar UUID temporal para el hash (usamos rifaId + numero como semilla)
+          const boletaSeed = `${rifaId}:${num}:${Date.now()}`;
+          const hash = crypto
+            .createHmac('sha256', secret)
+            .update(boletaSeed)
+            .digest('hex')
+            .substring(0, 32);
+          
+          const barcode = 'R' + rifaId.substring(0, 4) + '-' + num.toString().padStart(4, '0');
+          const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(verificacion_base_url + '/verificar/' + hash)}`;
+          
+          placeholders.push(`($${paramIndex}, $${paramIndex + 1}, 'DISPONIBLE', $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`);
+          values.push(rifaId, num, qrUrl, barcode, imagen_url, hash);
+          paramIndex += 6;
+        }
+        
+        const insertQuery = `
+          INSERT INTO boletas (rifa_id, numero, estado, qr_url, barcode, imagen_url, verificacion_hash, created_at, updated_at)
+          VALUES ${placeholders.join(', ')}
+        `;
+        
+        const result = await tx.query(insertQuery, values);
+        totalInserted += result.rowCount;
       }
-      
-      const result = await tx.query(boletaQuery, boletaParams);
       
       await tx.commit();
       
-      logger.info(`Generated ${rifa.total_boletas} boletas for rifa ${rifaId}`);
+      logger.info(`Generated ${totalInserted} boletas with verification hashes for rifa ${rifaId}`);
       
       return {
         rifa_id: rifaId,
         total_boletas: rifa.total_boletas,
-        boletas_generadas: result.rowCount,
+        boletas_generadas: totalInserted,
         estado: 'DISPONIBLE',
-        qr_base_url: qr_base_url,
+        verificacion_url: verificacion_base_url + '/verificar/',
         imagen_url: imagen_url,
         diseño_template: diseño_template
       };

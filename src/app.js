@@ -18,6 +18,7 @@ const abonosRoutes = require('./modules/abonos/abonos.routes');
 const uploadsRoutes = require('./modules/uploads/uploads.routes');
 const publicRoutes = require('./modules/public/public.routes');
 const publicDashboardRoutes = require('./modules/public-dashboard/public-dashboard.routes');
+const verificarRoutes = require('./modules/verificar/verificar.routes');
 
 const app = express();
 
@@ -74,6 +75,7 @@ app.use('/api/reportes', reportesRoutes);
 app.use('/api/uploads', uploadsRoutes);
 app.use('/api/public', publicRoutes);
 app.use('/api/admin/dashboard', publicDashboardRoutes);
+app.use('/api/verificar', verificarRoutes);
 app.use('/storage', require('express').static('storage'));
 
 // 🔹 Iniciar job de liberación de boletas expiradas (cada 5 minutos)
