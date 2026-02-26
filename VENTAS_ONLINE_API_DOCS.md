@@ -1,7 +1,7 @@
 # 🛒 API de Ventas Online — Documentación Completa para Frontend
 
 > **Base URL**: `https://rifas-backend-production.up.railway.app`
-> **Fecha**: Febrero 2026
+> **Fecha**: Febrero 2026 (actualizado 26/02/2026)
 > **Para**: Frontend de elgrancamion.com (página pública de compra)
 
 ---
@@ -56,6 +56,7 @@ x-api-key: pk_4f9a8c7e2d1b6a9f3c0d5e7f8a2b4c6d
 ├─────────────────────────────────────────────────────────┤
 │  5. POST /api/ventas-online/reservas                    │
 │     → Envía datos del cliente + TOKEN                   │
+│     → Backend busca cliente por tel/cédula o crea nuevo │
 │     → Se crea la reserva formal (72h para pagar)        │
 ├─────────────────────────────────────────────────────────┤
 │  6. GET /api/ventas-online/reservas/{token}/estado      │
@@ -294,6 +295,16 @@ x-api-key: pk_4f9a8c7e2d1b6a9f3c0d5e7f8a2b4c6d
 
 **Descripción**: Crear una reserva formal. Convierte el bloqueo temporal en una reserva con datos del cliente. El administrador recibirá una notificación y deberá aprobar cuando reciba el comprobante de pago.
 
+> 🔄 **Lógica de cliente (automática en el backend)**:
+> El comprador siempre envía sus datos normalmente. El backend se encarga de:
+> 1. **Buscar por teléfono** → si ya existe un cliente con ese teléfono, se reutiliza
+> 2. **Buscar por cédula** → si no lo encontró por teléfono y envió cédula, busca por cédula
+> 3. **Si encuentra** → asigna el cliente existente a la venta (no crea duplicados)
+> 4. **Si NO encuentra** → crea un cliente nuevo con los datos enviados
+>
+> Esto es **transparente para el frontend** — siempre se envían los mismos campos.
+> El beneficio es que si un cliente ya compró antes, sus ventas quedan vinculadas al mismo registro.
+
 **Body (JSON)**:
 ```json
 {
@@ -349,6 +360,8 @@ x-api-key: pk_4f9a8c7e2d1b6a9f3c0d5e7f8a2b4c6d
   }
 }
 ```
+
+> 💡 **Nota**: `cliente_nombre` refleja el nombre enviado por el comprador. Si el cliente ya existía en la DB (encontrado por teléfono o cédula), la venta se vincula al registro existente. Si es nuevo, se crea automáticamente.
 
 **Errores posibles**:
 | Status | Mensaje |
@@ -939,6 +952,36 @@ export default useVentasOnline;
 
 ---
 
+## 🧑‍💼 Gestión de Clientes (Automática)
+
+Cuando un comprador crea una reserva en elgrancamion.com, el backend gestiona automáticamente los clientes:
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  Comprador envía: nombre, teléfono, email, cédula, dirección│
+├──────────────────────────────────────────────────────────────┤
+│  1. ¿Existe cliente con ese TELÉFONO en la DB?              │
+│     → SÍ: Usar ese cliente existente para la venta          │
+│     → NO: Ir al paso 2                                       │
+├──────────────────────────────────────────────────────────────┤
+│  2. ¿Envió CÉDULA y existe cliente con esa cédula?          │
+│     → SÍ: Usar ese cliente existente para la venta          │
+│     → NO: Ir al paso 3                                       │
+├──────────────────────────────────────────────────────────────┤
+│  3. Crear cliente NUEVO con todos los datos enviados         │
+│     → Se asigna a la venta automáticamente                   │
+└──────────────────────────────────────────────────────────────┘
+```
+
+**Beneficios para el admin:**
+- Si un cliente ya compró antes, todas sus ventas quedan vinculadas al mismo registro
+- El admin puede ver el historial de compras de un cliente desde el dashboard
+- No se crean duplicados innecesarios
+
+**Para el frontend:** No cambia nada. El formulario siempre pide los mismos datos (nombre, teléfono, etc.) y el backend se encarga de la lógica internamente.
+
+---
+
 ## 🔄 Flujo visual resumido para la UI:
 
 ```
@@ -963,6 +1006,7 @@ export default useVentasOnline;
    │    └─ Notas
    │
    ├─ Paso 5: Confirmar → crea reserva (POST /reservas)
+   │    └─ Backend: busca cliente existente (tel/cédula) o crea nuevo
    │    └─ Muestra: resumen + instrucciones + token
    │
    └─ Paso 6: Página de estado (GET /reservas/:token/estado)
