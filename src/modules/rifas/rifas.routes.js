@@ -24,8 +24,8 @@ const updateRifaSchema = Joi.object({
 }).min(1);
 
 const generateBoletasSchema = Joi.object({
-  qr_base_url: Joi.string().uri().default('https://rifas.com/boletas'),
-  imagen_url: Joi.string().uri().optional().allow(null),
+  qr_base_url: Joi.string().uri().default('https://elgrancamion.com/verificar/'),
+  imagen_url: Joi.string().uri().optional().allow(null, ''),
   diseño_template: Joi.string().valid('default', 'classic', 'modern', 'minimal').default('default')
 }).min(0);
 
