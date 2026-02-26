@@ -64,7 +64,7 @@ const SQL_QUERIES = {
       a.moneda,
       a.estado,
       a.referencia,
-      a.observaciones,
+      a.notas,
       a.created_at,
       mp.nombre as metodo_pago
     FROM abonos a

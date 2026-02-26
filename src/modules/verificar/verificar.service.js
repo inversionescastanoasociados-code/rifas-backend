@@ -107,7 +107,7 @@ class VerificarService {
           referencia: a.referencia,
           metodo_pago: a.metodo_pago,
           fecha: a.created_at,
-          observaciones: a.observaciones,
+          observaciones: a.notas,
         })),
         verificado_en: new Date().toISOString(),
       };
