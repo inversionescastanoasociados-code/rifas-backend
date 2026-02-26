@@ -177,7 +177,7 @@ class VentasOnlineService {
    * Convierte un bloqueo temporal en una reserva formal.
    * El flujo es:
    *   1. Verificar que el token es válido y las boletas siguen bloqueadas
-   *   2. Crear/buscar cliente
+   *   2. Buscar cliente existente (por teléfono/cédula) o crear nuevo
    *   3. Crear venta con estado PENDIENTE + es_venta_online=true
    *   4. Asignar boletas a la venta con bloqueo extendido (72h)
    *   5. La reserva aparece automáticamente en el dashboard admin
@@ -231,30 +231,35 @@ class VentasOnlineService {
       const precioBoleta = parseFloat(rifaResult.rows[0].precio_boleta);
 
       // ══════════════════════════════════
-      //  PASO 2: Crear/buscar cliente
+      //  PASO 2: Buscar o crear cliente
       // ══════════════════════════════════
+      // Igual que el módulo de ventas del dashboard:
+      // 1. Buscar por teléfono
+      // 2. Si no encuentra, buscar por cédula
+      // 3. Si encuentra → usar ese cliente existente
+      // 4. Si no encuentra → crear uno nuevo
       if (!cliente || !cliente.nombre || !cliente.telefono) {
         throw new Error('Nombre y teléfono del cliente son obligatorios');
       }
 
       let clienteId;
-      let clienteNuevo = false;
+      let clienteNuevo = true;
 
-      // Buscar por teléfono primero
-      const clienteTelResult = await tx.query(SQL.GET_CLIENTE_BY_TELEFONO, [cliente.telefono.trim()]);
-      
-      if (clienteTelResult.rows.length > 0) {
-        clienteId = clienteTelResult.rows[0].id;
-      } else if (cliente.identificacion) {
-        // Buscar por identificación
-        const clienteIdResult = await tx.query(SQL.GET_CLIENTE_BY_IDENTIFICACION, [cliente.identificacion.trim()]);
-        if (clienteIdResult.rows.length > 0) {
-          clienteId = clienteIdResult.rows[0].id;
-        }
+      // Buscar por teléfono
+      let clienteResult = await tx.query(SQL.GET_CLIENTE_BY_TELEFONO, [cliente.telefono.trim()]);
+
+      // Si no encuentra por teléfono, buscar por cédula
+      if (clienteResult.rows.length === 0 && cliente.identificacion) {
+        clienteResult = await tx.query(SQL.GET_CLIENTE_BY_IDENTIFICACION, [cliente.identificacion.trim()]);
       }
 
-      // Crear si no existe
-      if (!clienteId) {
+      if (clienteResult.rows.length > 0) {
+        // Cliente existente encontrado → usarlo
+        clienteId = clienteResult.rows[0].id;
+        clienteNuevo = false;
+        logger.info(`[VentasOnline] Cliente existente encontrado: ${clienteId} - ${clienteResult.rows[0].nombre}`);
+      } else {
+        // Cliente nuevo → crearlo
         const newCliente = await tx.query(SQL.CREATE_CLIENTE, [
           cliente.nombre.trim(),
           cliente.telefono.trim(),
@@ -263,7 +268,7 @@ class VentasOnlineService {
           cliente.direccion ? cliente.direccion.trim() : null
         ]);
         clienteId = newCliente.rows[0].id;
-        clienteNuevo = true;
+        logger.info(`[VentasOnline] Cliente nuevo creado: ${clienteId} - ${cliente.nombre.trim()}`);
       }
 
       // ══════════════════════════════════
