@@ -190,7 +190,7 @@ async function test() {
     const adminHeaders = { 'Authorization': `Bearer ${adminToken}` };
     
     // Obtener ventas pendientes
-    const pendientesRes = await makeRequest('GET', `${API_BASE}/api/admin/dashboard/ventas/pendientes`, null, adminHeaders);
+    const pendientesRes = await makeRequest('GET', `${API_BASE}/api/admin/dashboard/ventas-publicas/pendientes`, null, adminHeaders);
     assert('Dashboard responde', pendientesRes.status === 200);
     
     // Buscar nuestra venta
@@ -229,7 +229,7 @@ async function test() {
     console.log('\n═══ CLEANUP: CANCELAR VENTA DE PRUEBA ═══');
     // ══════════════════════════════════════════
     if (ventaId) {
-      const cancelRes = await makeRequest('POST', `${API_BASE}/api/admin/dashboard/ventas/${ventaId}/cancelar`, {
+      const cancelRes = await makeRequest('POST', `${API_BASE}/api/admin/dashboard/ventas-publicas/${ventaId}/cancelar`, {
         motivo: 'Test cleanup'
       }, adminHeaders);
       assert('Venta cancelada (cleanup)', cancelRes.status === 200, `Got ${cancelRes.status}: ${JSON.stringify(cancelRes.data)}`);
