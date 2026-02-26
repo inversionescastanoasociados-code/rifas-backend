@@ -160,8 +160,17 @@ class RifaService {
       const { 
         imagen_url = null,
         diseño_template = 'default',
-        verificacion_base_url = process.env.FRONTEND_URL || 'https://rifas-frontend.vercel.app'
+        qr_base_url = null,
+        verificacion_base_url = null
       } = boletaInfo;
+      
+      // Normalizar URL base de verificación
+      // Acepta qr_base_url (del frontend) o verificacion_base_url
+      // Si el usuario puso la URL completa con /verificar/, la limpiamos
+      const DEFAULT_BASE = process.env.VERIFICACION_URL || 'https://elgrancamion.com';
+      let baseUrl = (qr_base_url || verificacion_base_url || DEFAULT_BASE).trim();
+      // Quitar trailing slash y /verificar si ya viene incluido
+      baseUrl = baseUrl.replace(/\/+$/, '').replace(/\/verificar\/?$/, '');
       
       // Generar hashes HMAC-SHA256 únicos para cada boleta
       const secret = config.verificacion?.secret || config.jwt.secret;
@@ -190,7 +199,7 @@ class RifaService {
             .substring(0, 32);
           
           const barcode = 'R' + rifaId.substring(0, 4) + '-' + num.toString().padStart(4, '0');
-          const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(verificacion_base_url + '/verificar/' + hash)}`;
+          const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(baseUrl + '/verificar/' + hash)}`;
           
           placeholders.push(`($${paramIndex}, $${paramIndex + 1}, 'DISPONIBLE', $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`);
           values.push(rifaId, num, qrUrl, barcode, imagen_url, hash);
@@ -215,7 +224,7 @@ class RifaService {
         total_boletas: rifa.total_boletas,
         boletas_generadas: totalInserted,
         estado: 'DISPONIBLE',
-        verificacion_url: verificacion_base_url + '/verificar/',
+        verificacion_url: baseUrl + '/verificar/',
         imagen_url: imagen_url,
         diseño_template: diseño_template
       };
