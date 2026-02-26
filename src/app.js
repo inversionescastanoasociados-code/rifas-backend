@@ -19,6 +19,7 @@ const uploadsRoutes = require('./modules/uploads/uploads.routes');
 const publicRoutes = require('./modules/public/public.routes');
 const publicDashboardRoutes = require('./modules/public-dashboard/public-dashboard.routes');
 const verificarRoutes = require('./modules/verificar/verificar.routes');
+const ventasOnlineRoutes = require('./modules/ventas-online/ventas-online.routes');
 
 const app = express();
 
@@ -59,6 +60,7 @@ app.get('/api', (req, res) => {
       pagos: '/api/pagos',
       abonos: '/api/abonos',
       public: '/api/public (web pública)',
+      ventas_online: '/api/ventas-online (ventas públicas seguras)',
       admin_dashboard: '/api/admin/dashboard (gestión ventas públicas)'
     }
   });
@@ -75,6 +77,7 @@ app.use('/api/reportes', reportesRoutes);
 app.use('/api/uploads', uploadsRoutes);
 app.use('/api/public', publicRoutes);
 app.use('/api/admin/dashboard', publicDashboardRoutes);
+app.use('/api/ventas-online', ventasOnlineRoutes);
 app.use('/api/verificar', verificarRoutes);
 app.use('/storage', require('express').static('storage'));
 
