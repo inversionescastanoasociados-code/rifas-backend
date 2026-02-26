@@ -29,6 +29,7 @@ class VerificarController {
       return res.status(500).json({
         success: false,
         message: 'Error al verificar la boleta.',
+        error: process.env.NODE_ENV !== 'production' ? error.message : undefined,
       });
     }
   }
