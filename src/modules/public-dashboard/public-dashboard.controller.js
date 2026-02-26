@@ -12,7 +12,8 @@ class PublicDashboardController {
       const filtros = {
         estado_venta: req.query.estado,
         rifa_id: req.query.rifa_id,
-        cliente_nombre: req.query.cliente_nombre
+        cliente_nombre: req.query.cliente_nombre,
+        cliente_identificacion: req.query.cliente_identificacion
       };
 
       const ventas = await dashboardService.getVentasPublicas(filtros);
@@ -37,7 +38,12 @@ class PublicDashboardController {
    */
   async getVentasPublicasPendientes(req, res) {
     try {
-      const ventas = await dashboardService.getVentasPublicasPendientes();
+      const filtros = {
+        cliente_nombre: req.query.cliente_nombre,
+        cliente_identificacion: req.query.cliente_identificacion
+      };
+
+      const ventas = await dashboardService.getVentasPublicasPendientes(filtros);
 
       return res.json({
         success: true,

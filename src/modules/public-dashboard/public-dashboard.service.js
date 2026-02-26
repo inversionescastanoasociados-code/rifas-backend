@@ -26,10 +26,16 @@ class PublicDashboardService {
         params.push(filtros.rifa_id);
       }
 
-      // Filtrar por cliente
+      // Filtrar por cliente nombre
       if (filtros.cliente_nombre) {
         whereConditions.push(`c.nombre ILIKE $${params.length + 1}`);
         params.push(`%${filtros.cliente_nombre}%`);
+      }
+
+      // Filtrar por cédula/identificación del cliente
+      if (filtros.cliente_identificacion) {
+        whereConditions.push(`c.identificacion ILIKE $${params.length + 1}`);
+        params.push(`%${filtros.cliente_identificacion}%`);
       }
 
       // Construir query con WHERE si hay filtros
@@ -52,9 +58,30 @@ class PublicDashboardService {
   /**
    * ⏳ Obtener ventas públicas pendientes de confirmación
    */
-  async getVentasPublicasPendientes() {
+  async getVentasPublicasPendientes(filtros = {}) {
     try {
-      const result = await query(SQL_QUERIES.GET_VENTAS_PUBLICAS_PENDIENTES);
+      let sql = SQL_QUERIES.GET_VENTAS_PUBLICAS_PENDIENTES;
+      let params = [];
+      let extraConditions = [];
+
+      if (filtros.cliente_nombre) {
+        extraConditions.push(`c.nombre ILIKE $${params.length + 1}`);
+        params.push(`%${filtros.cliente_nombre}%`);
+      }
+
+      if (filtros.cliente_identificacion) {
+        extraConditions.push(`c.identificacion ILIKE $${params.length + 1}`);
+        params.push(`%${filtros.cliente_identificacion}%`);
+      }
+
+      if (extraConditions.length > 0) {
+        sql = sql.replace(
+          "AND (v.estado_venta = 'PENDIENTE' OR v.estado_venta = 'ABONADA')",
+          `AND (v.estado_venta = 'PENDIENTE' OR v.estado_venta = 'ABONADA') AND ${extraConditions.join(' AND ')}`
+        );
+      }
+
+      const result = await query(sql, params);
       logger.info(`Obtenidas ${result.rows.length} ventas públicas pendientes`);
       return result.rows;
     } catch (error) {
