@@ -55,6 +55,11 @@ class VerificarService {
         }
       }
 
+      // Calcular financiero per-boleta (no de la venta general)
+      const precioBoleta = parseFloat(boleta.precio_boleta) || 0;
+      const totalPagadoBoleta = abonos.reduce((sum, a) => sum + parseFloat(a.monto), 0);
+      const saldoPendienteBoleta = Math.max(precioBoleta - totalPagadoBoleta, 0);
+
       // Construir respuesta pública (sin exponer IDs internos)
       return {
         boleta: {
@@ -66,7 +71,7 @@ class VerificarService {
         rifa: {
           nombre: boleta.rifa_nombre,
           descripcion: boleta.rifa_descripcion,
-          precio_boleta: parseFloat(boleta.precio_boleta),
+          precio_boleta: precioBoleta,
           fecha_sorteo: boleta.fecha_sorteo,
           premio_principal: boleta.premio_principal,
           total_boletas: boleta.total_boletas,
@@ -88,18 +93,14 @@ class VerificarService {
             },
         financiero: boleta.venta_info
           ? {
-              monto_total: parseFloat(boleta.venta_info.monto_total),
-              abono_total: parseFloat(boleta.venta_info.abono_total),
-              saldo_pendiente: parseFloat(boleta.venta_info.saldo_pendiente),
+              monto_total: precioBoleta,
+              abono_total: totalPagadoBoleta,
+              saldo_pendiente: saldoPendienteBoleta,
               estado: boleta.venta_info.estado,
               metodo_pago: boleta.venta_info.metodo_pago,
               porcentaje_pagado:
-                parseFloat(boleta.venta_info.monto_total) > 0
-                  ? Math.round(
-                      (parseFloat(boleta.venta_info.abono_total) /
-                        parseFloat(boleta.venta_info.monto_total)) *
-                        100
-                    )
+                precioBoleta > 0
+                  ? Math.round((totalPagadoBoleta / precioBoleta) * 100)
                   : 0,
             }
           : {
