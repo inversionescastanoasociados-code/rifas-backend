@@ -443,20 +443,49 @@ class VentasOnlineService {
       // 2. Buscar ventas del cliente
       const ventasResult = await query(SQL.GET_VENTAS_BY_CLIENTE_ID, [cliente.id]);
 
-      const ventas = ventasResult.rows.map((v) => ({
-        venta_id: v.venta_id,
-        rifa_nombre: v.rifa_nombre,
-        premio_principal: v.premio_principal,
-        fecha_sorteo: v.fecha_sorteo,
-        estado_venta: v.estado_venta,
-        monto_total: parseFloat(v.monto_total),
-        abono_total: parseFloat(v.abono_total),
-        saldo_pendiente: parseFloat(v.saldo_pendiente),
-        medio_pago: v.medio_pago,
-        created_at: v.created_at,
-        expires_at: v.expires_at,
-        boletas: v.boletas
-      }));
+      // 3. Para cada venta, enriquecer boletas con historial de abonos
+      const ventas = [];
+      for (const v of ventasResult.rows) {
+        const boletasConAbonos = [];
+        for (const boleta of v.boletas) {
+          // Buscar abonos de esta boleta
+          let abonos = [];
+          if (boleta.boleta_id) {
+            const abonosResult = await query(SQL.GET_ABONOS_BY_BOLETA_ID, [boleta.boleta_id]);
+            abonos = abonosResult.rows.map((a) => ({
+              monto: parseFloat(a.monto),
+              moneda: a.moneda,
+              estado: a.estado,
+              referencia: a.referencia,
+              metodo_pago: a.metodo_pago,
+              notas: a.notas,
+              fecha: a.created_at
+            }));
+          }
+          boletasConAbonos.push({
+            numero: boleta.numero,
+            estado: boleta.estado,
+            qr_hash: boleta.qr_hash,
+            qr_url: boleta.qr_url,
+            abonos
+          });
+        }
+
+        ventas.push({
+          venta_id: v.venta_id,
+          rifa_nombre: v.rifa_nombre,
+          premio_principal: v.premio_principal,
+          fecha_sorteo: v.fecha_sorteo,
+          estado_venta: v.estado_venta,
+          monto_total: parseFloat(v.monto_total),
+          abono_total: parseFloat(v.abono_total),
+          saldo_pendiente: parseFloat(v.saldo_pendiente),
+          medio_pago: v.medio_pago,
+          created_at: v.created_at,
+          expires_at: v.expires_at,
+          boletas: boletasConAbonos
+        });
+      }
 
       return {
         cliente: {

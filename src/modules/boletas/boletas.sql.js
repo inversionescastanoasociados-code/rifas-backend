@@ -161,6 +161,27 @@ const SQL_QUERIES = {
     SELECT $1, generate_series, 'DISPONIBLE'
     FROM generate_series(1, $2)
     RETURNING *
+  `,
+
+  /**
+   * Historial de abonos de una boleta específica.
+   * Filtra por boleta_id directamente.
+   */
+  GET_ABONOS_BY_BOLETA_ID: `
+    SELECT 
+      a.id,
+      a.monto,
+      a.moneda,
+      a.estado,
+      a.referencia,
+      a.notas,
+      a.created_at,
+      COALESCE(mp.nombre, a.gateway_pago, 'N/A') as metodo_pago
+    FROM abonos a
+    LEFT JOIN medios_pago mp ON a.medio_pago_id = mp.id
+    WHERE a.boleta_id = $1
+      AND a.estado != 'ANULADO'
+    ORDER BY a.created_at ASC
   `
 };
 

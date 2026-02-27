@@ -55,7 +55,7 @@ const SQL_QUERIES = {
   `,
 
   /**
-   * Obtener historial de abonos de una boleta (via venta_id)
+   * Obtener historial de abonos de una boleta por boleta_id
    */
   GET_ABONOS_BY_BOLETA: `
     SELECT 
@@ -66,12 +66,12 @@ const SQL_QUERIES = {
       a.referencia,
       a.notas,
       a.created_at,
-      mp.nombre as metodo_pago
+      COALESCE(mp.nombre, a.gateway_pago, 'N/A') as metodo_pago
     FROM abonos a
     LEFT JOIN medios_pago mp ON a.medio_pago_id = mp.id
-    WHERE a.venta_id = $1
+    WHERE a.boleta_id = $1
       AND a.estado != 'ANULADO'
-    ORDER BY a.created_at DESC
+    ORDER BY a.created_at ASC
   `,
 };
 

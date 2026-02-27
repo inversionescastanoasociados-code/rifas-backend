@@ -76,7 +76,22 @@ class BoletaService {
       if (result.rows.length === 0) {
         throw new Error('Boleta not found');
       }
-      return result.rows[0];
+      const boleta = result.rows[0];
+
+      // Obtener historial de abonos de esta boleta
+      const abonosResult = await query(SQL_QUERIES.GET_ABONOS_BY_BOLETA_ID, [id]);
+      boleta.abonos = abonosResult.rows.map((a) => ({
+        id: a.id,
+        monto: parseFloat(a.monto),
+        moneda: a.moneda,
+        estado: a.estado,
+        referencia: a.referencia,
+        metodo_pago: a.metodo_pago,
+        notas: a.notas,
+        fecha: a.created_at
+      }));
+
+      return boleta;
     } catch (error) {
       logger.error(`Error getting boleta ${id}:`, error);
       throw error;

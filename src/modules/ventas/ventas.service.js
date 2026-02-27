@@ -1096,6 +1096,7 @@ const totalPagado = abonos.reduce(
 
   // 4) Agrupar abonos por boleta para calcular pagado/saldo por boleta
   const abonosPorBoleta = new Map();
+  const abonosDetallePorBoleta = new Map();
 
   for (const abono of abonos) {
     const boletaId = abono.boleta_id;
@@ -1103,12 +1104,24 @@ const totalPagado = abonos.reduce(
 
     if (!abonosPorBoleta.has(boletaId)) {
       abonosPorBoleta.set(boletaId, 0);
+      abonosDetallePorBoleta.set(boletaId, []);
     }
 
     abonosPorBoleta.set(
       boletaId,
       abonosPorBoleta.get(boletaId) + monto
     );
+
+    abonosDetallePorBoleta.get(boletaId).push({
+      id: abono.id,
+      monto: monto,
+      moneda: abono.moneda,
+      estado: abono.estado,
+      referencia: abono.referencia,
+      metodo_pago: abono.gateway_pago || 'N/A',
+      notas: abono.notas,
+      fecha: abono.created_at
+    });
   }
 
   const boletasConFinanzas = boletas.map((b) => {
@@ -1119,7 +1132,8 @@ const totalPagado = abonos.reduce(
       ...b, // incluye id, numero, estado, bloqueo_hasta
       precio_boleta: precioBoleta,
       total_pagado_boleta: pagadoBoleta,
-      saldo_pendiente_boleta: saldoBoleta
+      saldo_pendiente_boleta: saldoBoleta,
+      abonos: abonosDetallePorBoleta.get(b.id) || []
     };
   });
 

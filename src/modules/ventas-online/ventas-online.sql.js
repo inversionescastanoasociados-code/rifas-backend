@@ -253,7 +253,8 @@ const SQL_QUERIES = {
           'numero', b.numero,
           'estado', b.estado,
           'qr_hash', b.verificacion_hash,
-          'qr_url', b.qr_url
+          'qr_url', b.qr_url,
+          'boleta_id', b.id
         ) ORDER BY b.numero
       ) as boletas
     FROM ventas v
@@ -263,6 +264,26 @@ const SQL_QUERIES = {
     WHERE v.cliente_id = $1
     GROUP BY v.id, r.id, mp.id
     ORDER BY v.created_at DESC
+  `,
+
+  /**
+   * Obtener historial de abonos de una boleta por boleta_id.
+   */
+  GET_ABONOS_BY_BOLETA_ID: `
+    SELECT 
+      a.id,
+      a.monto,
+      a.moneda,
+      a.estado,
+      a.referencia,
+      a.notas,
+      a.created_at,
+      COALESCE(mp.nombre, a.gateway_pago, 'N/A') as metodo_pago
+    FROM abonos a
+    LEFT JOIN medios_pago mp ON a.medio_pago_id = mp.id
+    WHERE a.boleta_id = $1
+      AND a.estado != 'ANULADO'
+    ORDER BY a.created_at ASC
   `
 };
 

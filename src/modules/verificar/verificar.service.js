@@ -41,15 +41,15 @@ class VerificarService {
       // Obtener abonos si hay venta asociada
       let abonos = [];
       if (boleta.venta_info) {
-        // Necesitamos el venta_id real para buscar abonos
-        const ventaResult = await query(
-          'SELECT venta_id FROM boletas WHERE verificacion_hash = $1',
+        // Buscar abonos por boleta_id (no por venta_id) para historial per-boleta
+        const boletaIdResult = await query(
+          'SELECT id FROM boletas WHERE verificacion_hash = $1',
           [hash]
         );
-        if (ventaResult.rows[0]?.venta_id) {
+        if (boletaIdResult.rows[0]?.id) {
           const abonosResult = await query(
             SQL_QUERIES.GET_ABONOS_BY_BOLETA,
-            [ventaResult.rows[0].venta_id]
+            [boletaIdResult.rows[0].id]
           );
           abonos = abonosResult.rows;
         }
