@@ -91,6 +91,17 @@ class BoletaService {
         fecha: a.created_at
       }));
 
+      // Calcular financiero per-boleta (no de la venta general)
+      const precioBoleta = parseFloat(boleta.precio_boleta) || 0;
+      const totalPagadoBoleta = boleta.abonos.reduce((sum, a) => sum + a.monto, 0);
+      const saldoPendienteBoleta = Math.max(precioBoleta - totalPagadoBoleta, 0);
+
+      boleta.boleta_financiero = {
+        precio_boleta: precioBoleta,
+        total_pagado: totalPagadoBoleta,
+        saldo_pendiente: saldoPendienteBoleta
+      };
+
       return boleta;
     } catch (error) {
       logger.error(`Error getting boleta ${id}:`, error);

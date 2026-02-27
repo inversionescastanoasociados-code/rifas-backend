@@ -25,6 +25,7 @@ const SQL_QUERIES = {
     SELECT 
       b.*,
       r.nombre as rifa_nombre,
+      r.precio_boleta,
       u.nombre as vendedor_nombre,
       CASE 
         WHEN (c.id IS NOT NULL OR vc.id IS NOT NULL) THEN 
