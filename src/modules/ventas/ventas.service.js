@@ -404,7 +404,8 @@ class VentaService {
   total_venta,
   total_pagado,
   notas,
-  vendida_por
+  vendida_por,
+  abonos_por_boleta
 } = ventaData;
 
 
@@ -500,9 +501,18 @@ class VentaService {
 
 
       // 🔹 Calcular monto por boleta
-      let montoPorBoleta = 0;
-      if (total_pagado > 0) {
-        montoPorBoleta = total_pagado / boletas.length;
+      // Si vienen abonos_por_boleta, usar montos individuales; si no, dividir equitativamente
+      const abonosPorBoletaMap = {};
+      if (abonos_por_boleta && Array.isArray(abonos_por_boleta)) {
+        for (const ab of abonos_por_boleta) {
+          abonosPorBoletaMap[ab.boleta_id] = Number(ab.monto);
+        }
+      }
+      const usarAbonosIndividuales = Object.keys(abonosPorBoletaMap).length > 0;
+
+      let montoPorBoletaDefault = 0;
+      if (!usarAbonosIndividuales && total_pagado > 0) {
+        montoPorBoletaDefault = total_pagado / boletas.length;
       }
 
       // 🔹 5️⃣ Procesar cada boleta
@@ -522,9 +532,19 @@ class VentaService {
           throw new Error(`Boleta ${id} no está bloqueada o token inválido`);
         }
 
+        // Calcular monto para esta boleta específica
+        const montoPorBoleta = usarAbonosIndividuales
+          ? (abonosPorBoletaMap[id] || 0)
+          : montoPorBoletaDefault;
+
+        const boletaPagadaCompleta = montoPorBoleta >= precioBoleta;
+        const boletaTieneAbono = montoPorBoleta > 0 && montoPorBoleta < precioBoleta;
+
         let nuevoEstado = 'PAGADA';
-        if (esAbono) {
+        if (boletaTieneAbono) {
           nuevoEstado = 'ABONADA';
+        } else if (montoPorBoleta === 0 && esAbono) {
+          nuevoEstado = 'ABONADA'; // Pertenece a venta con abono, sin pago aún
         }
 
         await tx.query(
@@ -541,7 +561,7 @@ class VentaService {
 );
 
 
-        if (total_pagado > 0) {
+        if (montoPorBoleta > 0) {
           await tx.query(
             `INSERT INTO abonos (
               venta_id,
@@ -564,7 +584,7 @@ class VentaService {
               montoPorBoleta,
               'COP',
               'CONFIRMADO',
-              esAbono ? 'Abono inicial' : 'Pago completo'
+              boletaPagadaCompleta ? 'Pago completo' : 'Abono inicial'
             ]
           );
         }

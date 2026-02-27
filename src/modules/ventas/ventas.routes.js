@@ -23,7 +23,13 @@ const createVentaSchema = Joi.object({
   medio_pago_id: Joi.string().uuid().required(),
   total_venta: Joi.number().positive().required(),
   total_pagado: Joi.number().positive().required(),
-  notas: Joi.string().optional().max(500)
+  notas: Joi.string().optional().max(500),
+  abonos_por_boleta: Joi.array().items(
+    Joi.object({
+      boleta_id: Joi.string().uuid().required(),
+      monto: Joi.number().min(0).required()
+    })
+  ).optional()
 });
 
 const crearReservaSchema = Joi.object({
