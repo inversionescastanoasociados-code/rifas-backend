@@ -822,7 +822,7 @@ class VentaService {
   }
 
 
-  async registrarAbonoVenta(ventaId, monto, medioPagoId, moneda, userId, notas) {
+  async registrarAbonoVenta(ventaId, monto, medioPagoId, moneda, userId, notas, boletaId = null) {
   const tx = await beginTransaction();
 
   try {
@@ -838,25 +838,8 @@ class VentaService {
 
     const venta = ventaResult.rows[0];
     const montoTotal = Number(venta.monto_total || 0);
-    
-    // 2) Calcular total pagado actual
-    const abonosActualesResult = await tx.query(
-      `SELECT COALESCE(SUM(monto), 0) as total_pagado
-       FROM abonos WHERE venta_id = $1`,
-      [ventaId]
-    );
-    const totalPagadoActual = Number(abonosActualesResult.rows[0].total_pagado);
-    const saldoPendienteActual = montoTotal - totalPagadoActual;
 
-    if (saldoPendienteActual <= 0) {
-      throw new Error('La venta ya está pagada');
-    }
-
-    if (monto > saldoPendienteActual) {
-      throw new Error('El monto excede el saldo pendiente');
-    }
-
-    // 2.5) Obtener nombre del medio de pago para gateway_pago
+    // 2) Obtener nombre del medio de pago para gateway_pago
     let gatewayPagoNombre = null;
     if (medioPagoId) {
       const medioPagoCheck = await tx.query(
@@ -870,7 +853,7 @@ class VentaService {
 
     // 3) Obtener boletas de la venta
     const boletasResult = await tx.query(
-      `SELECT id FROM boletas WHERE venta_id = $1`,
+      `SELECT id, numero, estado FROM boletas WHERE venta_id = $1 ORDER BY numero ASC`,
       [ventaId]
     );
 
@@ -880,39 +863,111 @@ class VentaService {
 
     const boletas = boletasResult.rows;
     const cantidadBoletas = boletas.length;
-    const montoPorBoleta = monto / cantidadBoletas;
+    const precioBoleta = montoTotal / cantidadBoletas;
 
-    // 4) Crear abonos (uno por cada boleta)
-    for (const boleta of boletas) {
+    // ═══════════════════════════════════════════════
+    // MODO A: Abono a una BOLETA ESPECÍFICA
+    // ═══════════════════════════════════════════════
+    if (boletaId) {
+      // Verificar que la boleta pertenece a esta venta
+      const boletaTarget = boletas.find(b => b.id === boletaId);
+      if (!boletaTarget) {
+        throw new Error('La boleta no pertenece a esta venta');
+      }
+
+      // Calcular saldo pendiente de ESTA boleta
+      const abonosBoletaResult = await tx.query(
+        `SELECT COALESCE(SUM(monto), 0) as total_pagado
+         FROM abonos WHERE venta_id = $1 AND boleta_id = $2`,
+        [ventaId, boletaId]
+      );
+      const pagadoBoleta = Number(abonosBoletaResult.rows[0].total_pagado);
+      const saldoBoleta = precioBoleta - pagadoBoleta;
+
+      if (saldoBoleta <= 0) {
+        throw new Error(`La boleta #${boletaTarget.numero} ya está pagada`);
+      }
+
+      if (monto > saldoBoleta) {
+        throw new Error(`El monto excede el saldo de la boleta #${boletaTarget.numero} ($${saldoBoleta.toLocaleString()})`);
+      }
+
+      // Crear UN solo abono para esta boleta
       await tx.query(
         `INSERT INTO abonos (
-          venta_id,
-          boleta_id,
-          monto,
-          estado,
-          medio_pago_id,
-          gateway_pago,
-          moneda,
-          registrado_por,
-          notas,
-          created_at
+          venta_id, boleta_id, monto, estado, medio_pago_id,
+          gateway_pago, moneda, registrado_por, notas, created_at
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)`,
-        [
-          ventaId,
-          boleta.id,
-          montoPorBoleta,
-          'CONFIRMADO',
-          medioPagoId,
-          gatewayPagoNombre,
-          moneda || 'COP',
-          userId,
-          notas || null
-        ]
+        [ventaId, boletaId, monto, 'CONFIRMADO', medioPagoId,
+         gatewayPagoNombre, moneda || 'COP', userId, notas || null]
       );
+
+      // Actualizar estado de ESTA boleta individualmente
+      const nuevoPagadoBoleta = pagadoBoleta + monto;
+      const estadoBoleta = nuevoPagadoBoleta >= precioBoleta ? 'PAGADA' : 'ABONADA';
+      await tx.query(
+        `UPDATE boletas SET estado = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
+        [estadoBoleta, boletaId]
+      );
+
+    } else {
+      // ═══════════════════════════════════════════════
+      // MODO B: Abono GENERAL (distribuir entre boletas)
+      // ═══════════════════════════════════════════════
+      // Calcular total pagado actual de la venta
+      const abonosActualesResult = await tx.query(
+        `SELECT COALESCE(SUM(monto), 0) as total_pagado
+         FROM abonos WHERE venta_id = $1`,
+        [ventaId]
+      );
+      const totalPagadoActual = Number(abonosActualesResult.rows[0].total_pagado);
+      const saldoPendienteActual = montoTotal - totalPagadoActual;
+
+      if (saldoPendienteActual <= 0) {
+        throw new Error('La venta ya está pagada');
+      }
+
+      if (monto > saldoPendienteActual) {
+        throw new Error('El monto excede el saldo pendiente');
+      }
+
+      const montoPorBoleta = monto / cantidadBoletas;
+
+      // Crear abonos (uno por cada boleta)
+      for (const boleta of boletas) {
+        await tx.query(
+          `INSERT INTO abonos (
+            venta_id, boleta_id, monto, estado, medio_pago_id,
+            gateway_pago, moneda, registrado_por, notas, created_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)`,
+          [ventaId, boleta.id, montoPorBoleta, 'CONFIRMADO', medioPagoId,
+           gatewayPagoNombre, moneda || 'COP', userId, notas || null]
+        );
+      }
+
+      // Actualizar estado de cada boleta individualmente
+      for (const boleta of boletas) {
+        const abBoleta = await tx.query(
+          `SELECT COALESCE(SUM(monto), 0) as total FROM abonos WHERE venta_id = $1 AND boleta_id = $2`,
+          [ventaId, boleta.id]
+        );
+        const pagado = Number(abBoleta.rows[0].total);
+        const estBoleta = pagado >= precioBoleta ? 'PAGADA' : 'ABONADA';
+        await tx.query(
+          `UPDATE boletas SET estado = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
+          [estBoleta, boleta.id]
+        );
+      }
     }
 
-        // 5) Calcular nuevos totales
-    const nuevoTotalPagado = totalPagadoActual + monto;
+    // ═══════════════════════════════════════════════
+    // Recalcular totales de la venta
+    // ═══════════════════════════════════════════════
+    const nuevoTotalResult = await tx.query(
+      `SELECT COALESCE(SUM(monto), 0) as total FROM abonos WHERE venta_id = $1`,
+      [ventaId]
+    );
+    const nuevoTotalPagado = Number(nuevoTotalResult.rows[0].total);
     const nuevoSaldo = montoTotal - nuevoTotalPagado;
 
     let nuevoEstado = 'ABONADA';
@@ -920,7 +975,7 @@ class VentaService {
       nuevoEstado = 'PAGADA';
     }
 
-    // 6) Actualizar venta (solo abono_total y estado; saldo_pendiente es columna generada)
+    // Actualizar venta
     await tx.query(
       `UPDATE ventas 
        SET abono_total = $1, 
@@ -930,18 +985,9 @@ class VentaService {
       [nuevoTotalPagado, nuevoEstado, ventaId]
     );
 
-    // 7) Actualizar estado de boletas
-    const estadoBoleta = nuevoEstado === 'PAGADA' ? 'PAGADA' : 'ABONADA';
-    await tx.query(
-      `UPDATE boletas 
-       SET estado = $1, updated_at = CURRENT_TIMESTAMP
-       WHERE venta_id = $2`,
-      [estadoBoleta, ventaId]
-    );
-
     await tx.commit();
 
-    // 8) Retornar venta actualizada
+    // Retornar venta actualizada
     const ventaActualizadaResult = await query(
       `SELECT * FROM ventas WHERE id = $1`,
       [ventaId]

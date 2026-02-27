@@ -486,7 +486,7 @@ async getVentasPorCliente(req, res) {
 async registrarAbono(req, res) {
   try {
     const { id } = req.params;
-    const { monto, metodo_pago, notas } = req.body;
+    const { monto, metodo_pago, notas, boleta_id } = req.body;
 
     if (!monto || monto <= 0) {
       return res.status(400).json({
@@ -512,7 +512,8 @@ async registrarAbono(req, res) {
       medioPagoId,
       'COP',
       req.user.id,
-      notas
+      notas,
+      boleta_id || null
     );
 
     res.json({

@@ -115,6 +115,46 @@ class PublicDashboardService {
 
       venta.abonos_pendientes = abonosResult.rows;
 
+      // ── Calcular datos financieros por boleta ──
+      // Obtener todos los abonos de esta venta
+      const todosAbonosResult = await query(
+        `SELECT a.boleta_id, a.monto
+         FROM abonos a
+         WHERE a.venta_id = $1`,
+        [ventaId]
+      );
+
+      const montoTotal = Number(venta.monto_total);
+      const boletas = venta.boletas || [];
+      const cantidadBoletas = boletas.length;
+
+      if (cantidadBoletas > 0) {
+        const precioBoleta = montoTotal / cantidadBoletas;
+
+        // Agrupar abonos por boleta
+        const abonosPorBoleta = new Map();
+        for (const abono of todosAbonosResult.rows) {
+          const boletaId = abono.boleta_id;
+          const monto = Number(abono.monto);
+          if (!abonosPorBoleta.has(boletaId)) {
+            abonosPorBoleta.set(boletaId, 0);
+          }
+          abonosPorBoleta.set(boletaId, abonosPorBoleta.get(boletaId) + monto);
+        }
+
+        // Enriquecer cada boleta con datos financieros
+        venta.boletas = boletas.map((b) => {
+          const pagadoBoleta = Number(abonosPorBoleta.get(b.boleta_id) || 0);
+          const saldoBoleta = Math.max(precioBoleta - pagadoBoleta, 0);
+          return {
+            ...b,
+            precio_boleta: precioBoleta,
+            total_pagado_boleta: pagadoBoleta,
+            saldo_pendiente_boleta: saldoBoleta
+          };
+        });
+      }
+
       logger.info(`Detalles de venta pública obtenidos: ${ventaId}`);
       return venta;
     } catch (error) {

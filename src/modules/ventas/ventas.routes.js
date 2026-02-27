@@ -194,7 +194,8 @@ router.post('/:id/cancel',
 const registrarAbonoSchema = Joi.object({
   monto: Joi.number().positive().required(),
   metodo_pago: Joi.string().optional(),
-  notas: Joi.string().optional().max(500)
+  notas: Joi.string().optional().max(500),
+  boleta_id: Joi.string().uuid().optional()
 });
 
 // IMPORTANTE: Esta ruta debe estar ANTES de la ruta genérica `/:id` (importante el orden)
