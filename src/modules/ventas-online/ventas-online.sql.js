@@ -240,6 +240,7 @@ const SQL_QUERIES = {
       v.id as venta_id,
       r.nombre as rifa_nombre,
       r.premio_principal,
+      r.precio_boleta,
       r.fecha_sorteo,
       v.estado_venta,
       v.monto_total,

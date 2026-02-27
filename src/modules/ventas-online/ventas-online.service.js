@@ -462,11 +462,20 @@ class VentasOnlineService {
               fecha: a.created_at
             }));
           }
+          // Calcular financiero per-boleta
+          const precioBoleta = parseFloat(v.precio_boleta) || 0;
+          const totalPagadoBoleta = abonos.reduce((sum, a) => sum + a.monto, 0);
+          const saldoPendienteBoleta = Math.max(precioBoleta - totalPagadoBoleta, 0);
+
           boletasConAbonos.push({
             numero: boleta.numero,
             estado: boleta.estado,
             qr_hash: boleta.qr_hash,
             qr_url: boleta.qr_url,
+            precio_boleta: precioBoleta,
+            total_pagado_boleta: totalPagadoBoleta,
+            saldo_pendiente_boleta: saldoPendienteBoleta,
+            porcentaje_pagado: precioBoleta > 0 ? Math.round((totalPagadoBoleta / precioBoleta) * 100) : 0,
             abonos
           });
         }
