@@ -218,6 +218,51 @@ const SQL_QUERIES = {
     FROM medios_pago
     WHERE activo = true
     ORDER BY nombre ASC
+  `,
+
+  // ───────── CONSULTA POR CÉDULA ─────────
+  /**
+   * Buscar cliente por identificación (cédula).
+   */
+  GET_CLIENTE_BY_CEDULA: `
+    SELECT id, nombre, telefono, email, identificacion
+    FROM clientes
+    WHERE identificacion = $1
+    LIMIT 1
+  `,
+
+  /**
+   * Obtener ventas de un cliente con boletas, info de rifa y medio de pago.
+   * Incluye QR hash y QR URL para cada boleta.
+   */
+  GET_VENTAS_BY_CLIENTE_ID: `
+    SELECT 
+      v.id as venta_id,
+      r.nombre as rifa_nombre,
+      r.premio_principal,
+      r.fecha_sorteo,
+      v.estado_venta,
+      v.monto_total,
+      v.abono_total,
+      (v.monto_total - v.abono_total) as saldo_pendiente,
+      mp.nombre as medio_pago,
+      v.created_at,
+      v.expires_at,
+      json_agg(
+        json_build_object(
+          'numero', b.numero,
+          'estado', b.estado,
+          'qr_hash', b.verificacion_hash,
+          'qr_url', b.qr_url
+        ) ORDER BY b.numero
+      ) as boletas
+    FROM ventas v
+    JOIN rifas r ON v.rifa_id = r.id
+    LEFT JOIN medios_pago mp ON v.medio_pago_id = mp.id
+    JOIN boletas b ON b.venta_id = v.id
+    WHERE v.cliente_id = $1
+    GROUP BY v.id, r.id, mp.id
+    ORDER BY v.created_at DESC
   `
 };
 

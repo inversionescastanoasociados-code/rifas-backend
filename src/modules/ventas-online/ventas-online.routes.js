@@ -218,6 +218,21 @@ const tokenParamSchema = Joi.object({
     })
 });
 
+const cedulaParamSchema = Joi.object({
+  cedula: Joi.string()
+    .trim()
+    .min(4)
+    .max(50)
+    .pattern(/^[0-9a-zA-Z\-]+$/)
+    .required()
+    .messages({
+      'string.min': 'Cédula debe tener al menos 4 caracteres',
+      'string.max': 'Cédula no puede exceder 50 caracteres',
+      'string.pattern.base': 'Formato de cédula inválido',
+      'any.required': 'Cédula es requerida'
+    })
+});
+
 // ═══════════════════════════════════════
 //  MIDDLEWARE: API Key en TODAS las rutas
 // ═══════════════════════════════════════
@@ -296,6 +311,16 @@ router.get('/reservas/:token/estado',
 router.get('/medios-pago',
   readLimiter,
   controller.getMediosPago
+);
+
+/**
+ * 🔍 GET /api/ventas-online/consulta/cedula/:cedula
+ * Consultar estado de cuenta de un cliente por cédula
+ */
+router.get('/consulta/cedula/:cedula',
+  statusLimiter,
+  validateParams(cedulaParamSchema),
+  controller.consultarPorCedula
 );
 
 module.exports = router;

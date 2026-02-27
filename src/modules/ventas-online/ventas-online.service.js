@@ -407,6 +407,72 @@ class VentasOnlineService {
       throw error;
     }
   }
+
+  // ═══════════════════════════════════════
+  //  8. CONSULTA POR CÉDULA (estado de cuenta)
+  // ═══════════════════════════════════════
+  /**
+   * Busca un cliente por cédula (identificacion) y retorna todas
+   * sus ventas con boletas, incluido QR hash / QR URL.
+   *
+   * @param {string} cedula - Número de cédula / identificación
+   * @returns {{ cliente, ventas, total_ventas }}
+   */
+  async consultarPorCedula(cedula) {
+    try {
+      if (!cedula || typeof cedula !== 'string' || cedula.trim().length < 4) {
+        throw new Error('Cédula inválida. Debe tener al menos 4 caracteres.');
+      }
+
+      const cedulaLimpia = cedula.trim();
+
+      // 1. Buscar cliente
+      const clienteResult = await query(SQL.GET_CLIENTE_BY_CEDULA, [cedulaLimpia]);
+
+      if (clienteResult.rows.length === 0) {
+        // No encontrado → devolver resultado vacío (no error 404)
+        return {
+          cliente: null,
+          ventas: [],
+          total_ventas: 0
+        };
+      }
+
+      const cliente = clienteResult.rows[0];
+
+      // 2. Buscar ventas del cliente
+      const ventasResult = await query(SQL.GET_VENTAS_BY_CLIENTE_ID, [cliente.id]);
+
+      const ventas = ventasResult.rows.map((v) => ({
+        venta_id: v.venta_id,
+        rifa_nombre: v.rifa_nombre,
+        premio_principal: v.premio_principal,
+        fecha_sorteo: v.fecha_sorteo,
+        estado_venta: v.estado_venta,
+        monto_total: parseFloat(v.monto_total),
+        abono_total: parseFloat(v.abono_total),
+        saldo_pendiente: parseFloat(v.saldo_pendiente),
+        medio_pago: v.medio_pago,
+        created_at: v.created_at,
+        expires_at: v.expires_at,
+        boletas: v.boletas
+      }));
+
+      return {
+        cliente: {
+          nombre: cliente.nombre,
+          telefono: cliente.telefono,
+          email: cliente.email,
+          identificacion: cliente.identificacion
+        },
+        ventas,
+        total_ventas: ventas.length
+      };
+    } catch (error) {
+      logger.error(`[VentasOnline] Error consultando por cédula ${cedula}:`, error);
+      throw error;
+    }
+  }
 }
 
 module.exports = new VentasOnlineService();

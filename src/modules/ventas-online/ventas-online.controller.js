@@ -181,6 +181,28 @@ class VentasOnlineController {
       });
     }
   }
+
+  /**
+   * GET /api/ventas-online/consulta/cedula/:cedula
+   * Consultar estado de cuenta de un cliente por cédula
+   */
+  async consultarPorCedula(req, res) {
+    try {
+      const { cedula } = req.params;
+      const result = await ventasOnlineService.consultarPorCedula(cedula);
+      return res.json({
+        success: true,
+        data: result
+      });
+    } catch (error) {
+      logger.error('[VentasOnline:Controller] consultarPorCedula error:', error);
+      const status = error.message.includes('inválida') ? 400 : 500;
+      return res.status(status).json({
+        success: false,
+        message: error.message || 'Error al consultar por cédula'
+      });
+    }
+  }
 }
 
 module.exports = new VentasOnlineController();
