@@ -26,7 +26,7 @@ const SQL_QUERIES = {
   `,
 
   GET_RIFA_ACTIVA_BY_ID: `
-    SELECT id, nombre, precio_boleta, total_boletas, boletas_vendidas, estado
+    SELECT id, nombre, precio_boleta, total_boletas, boletas_vendidas, estado, fecha_sorteo
     FROM rifas
     WHERE id = $1 AND estado = 'ACTIVA'
   `,

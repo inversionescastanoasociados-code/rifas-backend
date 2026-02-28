@@ -179,6 +179,110 @@ const SQL_QUERIES = {
     RETURNING *
   `,
 
+  // SOLO ventas SIN_REVISAR (para el banner de notificación)
+  GET_VENTAS_SIN_REVISAR: `
+    SELECT 
+      v.id,
+      v.rifa_id,
+      v.cliente_id,
+      v.monto_total,
+      v.abono_total,
+      (v.monto_total - v.abono_total) as saldo_pendiente,
+      v.estado_venta,
+      v.medio_pago_id,
+      v.created_at,
+      c.nombre as cliente_nombre,
+      c.telefono as cliente_telefono,
+      c.email as cliente_email,
+      c.identificacion as cliente_identificacion,
+      r.nombre as rifa_nombre,
+      ARRAY_LENGTH(ARRAY_AGG(b.id), 1) as cantidad_boletas,
+      ARRAY_AGG(b.numero ORDER BY b.numero) as numeros_boletas
+    FROM ventas v
+    JOIN clientes c ON v.cliente_id = c.id
+    JOIN rifas r ON v.rifa_id = r.id
+    LEFT JOIN boletas b ON v.id = b.venta_id
+    WHERE v.es_venta_online = true 
+      AND v.estado_venta = 'SIN_REVISAR'
+    GROUP BY v.id, c.id, r.id
+    ORDER BY v.created_at DESC
+  `,
+
+  // BOLETAS RESERVADAS (admin module - both online and punto fisico)
+  GET_BOLETAS_RESERVADAS: `
+    SELECT 
+      b.id as boleta_id,
+      b.numero,
+      b.estado,
+      b.bloqueo_hasta,
+      b.reserva_token,
+      b.created_at as boleta_created_at,
+      b.updated_at as boleta_updated_at,
+      r.id as rifa_id,
+      r.nombre as rifa_nombre,
+      r.precio_boleta,
+      r.fecha_sorteo,
+      c.id as cliente_id,
+      c.nombre as cliente_nombre,
+      c.telefono as cliente_telefono,
+      c.identificacion as cliente_identificacion,
+      v.id as venta_id,
+      v.estado_venta,
+      v.es_venta_online,
+      v.created_at as venta_created_at,
+      v.expires_at as venta_expires_at,
+      CASE 
+        WHEN v.es_venta_online = true THEN 'ONLINE'
+        ELSE 'PUNTO_FISICO'
+      END as origen
+    FROM boletas b
+    JOIN rifas r ON b.rifa_id = r.id
+    LEFT JOIN clientes c ON b.cliente_id = c.id
+    LEFT JOIN ventas v ON b.venta_id = v.id
+    WHERE b.estado = 'RESERVADA'
+    ORDER BY b.bloqueo_hasta ASC NULLS LAST
+  `,
+
+  // LIBERAR BOLETAS MANUALMENTE (admin)
+  LIBERAR_BOLETA_MANUAL: `
+    UPDATE boletas
+    SET estado = 'DISPONIBLE',
+        cliente_id = NULL,
+        vendido_por = NULL,
+        venta_id = NULL,
+        reserva_token = NULL,
+        bloqueo_hasta = NULL,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = $1
+      AND estado = 'RESERVADA'
+    RETURNING id, numero, rifa_id
+  `,
+
+  // LIBERAR TODAS LAS BOLETAS DE UNA VENTA
+  LIBERAR_BOLETAS_DE_VENTA: `
+    UPDATE boletas
+    SET estado = 'DISPONIBLE',
+        cliente_id = NULL,
+        vendido_por = NULL,
+        venta_id = NULL,
+        reserva_token = NULL,
+        bloqueo_hasta = NULL,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE venta_id = $1
+      AND estado = 'RESERVADA'
+    RETURNING id, numero
+  `,
+
+  // CANCELAR VENTA ASOCIADA al liberar boletas
+  CANCELAR_VENTA_SI_SIN_BOLETAS: `
+    UPDATE ventas
+    SET estado_venta = 'CANCELADA',
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = $1
+      AND estado_venta IN ('PENDIENTE', 'SIN_REVISAR')
+    RETURNING id
+  `,
+
   // MARCAR VENTA COMO REVISADA (SIN_REVISAR → PENDIENTE)
   MARK_VENTA_REVISADA: `
     UPDATE ventas

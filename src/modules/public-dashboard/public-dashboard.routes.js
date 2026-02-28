@@ -24,6 +24,30 @@ router.get('/ventas-publicas', dashboardController.getVentasPublicas);
 router.get('/ventas-publicas/pendientes', dashboardController.getVentasPublicasPendientes);
 
 /**
+ * 🔔 GET /api/admin/dashboard/ventas-publicas/sin-revisar
+ * Listar SOLO ventas en estado SIN_REVISAR (para banner de notificación)
+ */
+router.get('/ventas-publicas/sin-revisar', dashboardController.getVentasSinRevisar);
+
+/**
+ * 🎟️ GET /api/admin/dashboard/boletas-reservadas
+ * Listar TODAS las boletas reservadas (online + punto físico)
+ */
+router.get('/boletas-reservadas', dashboardController.getBoletasReservadas);
+
+/**
+ * 🔓 POST /api/admin/dashboard/boletas-reservadas/:boletaId/liberar
+ * Liberar manualmente una boleta reservada
+ */
+router.post('/boletas-reservadas/:boletaId/liberar', dashboardController.liberarBoleta);
+
+/**
+ * 🔓 POST /api/admin/dashboard/boletas-reservadas/venta/:ventaId/liberar
+ * Liberar TODAS las boletas de una venta y cancelar la venta
+ */
+router.post('/boletas-reservadas/venta/:ventaId/liberar', dashboardController.liberarBoletasDeVenta);
+
+/**
  * 🔍 GET /api/admin/dashboard/ventas-publicas/:ventaId
  * Obtener detalles COMPLETOS de una venta pública específica
  * Incluye: cliente, boletas, abonos pendientes

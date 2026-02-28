@@ -22,7 +22,7 @@ const crypto = require('crypto');
 // ───────── CONSTANTES DE SEGURIDAD ─────────
 const BLOQUEO_TEMPORAL_MINUTOS = 15;    // Bloqueo temporal al seleccionar boletas
 const BLOQUEO_MAXIMO_MINUTOS = 30;      // Máximo que un usuario puede pedir
-const RESERVA_EXPIRACION_HORAS = 72;    // 3 días para que el cliente pague
+const RESERVA_EXPIRACION_HORAS = 72;    // Fallback si no hay fecha_sorteo
 const MAX_BOLETAS_POR_RESERVA = 20;     // Máximo boletas que se pueden reservar de golpe
 const MIN_BOLETAS_POR_RESERVA = 1;
 
@@ -292,8 +292,14 @@ class VentasOnlineService {
       // ══════════════════════════════════
       //  PASO 4: Crear venta/reserva
       // ══════════════════════════════════
-      const expiresAt = new Date();
-      expiresAt.setHours(expiresAt.getHours() + RESERVA_EXPIRACION_HORAS);
+      // Expiración: hasta la fecha del sorteo (si existe), si no → 72h fallback
+      let expiresAt;
+      if (rifaResult.rows[0].fecha_sorteo) {
+        expiresAt = new Date(rifaResult.rows[0].fecha_sorteo);
+      } else {
+        expiresAt = new Date();
+        expiresAt.setHours(expiresAt.getHours() + RESERVA_EXPIRACION_HORAS);
+      }
 
       const ventaResult = await tx.query(SQL.CREATE_RESERVA_ONLINE, [
         rifaId,
@@ -343,11 +349,11 @@ class VentasOnlineService {
         precio_boleta: precioBoleta,
         cliente_nombre: cliente.nombre.trim(),
         expires_at: expiresAt,
-        mensaje: `Reserva creada exitosamente. Tiene ${RESERVA_EXPIRACION_HORAS} horas para enviar su comprobante de pago. Un administrador revisará y aprobará su compra.`,
+        mensaje: `Reserva creada exitosamente. Su reserva es válida hasta el día del sorteo. Un administrador revisará y aprobará su compra.`,
         instrucciones: [
           'Envíe su comprobante de pago al administrador.',
           'Su reserva será revisada y confirmada.',
-          `Si no se confirma el pago en ${RESERVA_EXPIRACION_HORAS} horas, las boletas se liberarán automáticamente.`,
+          'Su reserva es válida hasta el día del sorteo.',
           'Puede consultar el estado de su reserva con el token proporcionado.'
         ]
       };

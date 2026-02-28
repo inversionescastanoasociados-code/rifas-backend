@@ -239,6 +239,92 @@ class PublicDashboardController {
       });
     }
   }
+
+  /**
+   * GET /api/admin/dashboard/ventas-publicas/sin-revisar
+   * 🔔 Obtener SOLO ventas en estado SIN_REVISAR (para banner de notificación)
+   */
+  async getVentasSinRevisar(req, res) {
+    try {
+      const ventas = await dashboardService.getVentasSinRevisar();
+      return res.json({
+        success: true,
+        data: ventas,
+        count: ventas.length
+      });
+    } catch (error) {
+      logger.error('Error en getVentasSinRevisar:', error);
+      return res.status(500).json({
+        success: false,
+        message: error.message || 'Error obteniendo ventas sin revisar'
+      });
+    }
+  }
+
+  /**
+   * GET /api/admin/dashboard/boletas-reservadas
+   * 🎟️ Obtener todas las boletas reservadas (online + punto físico)
+   */
+  async getBoletasReservadas(req, res) {
+    try {
+      const boletas = await dashboardService.getBoletasReservadas();
+      return res.json({
+        success: true,
+        data: boletas,
+        count: boletas.length
+      });
+    } catch (error) {
+      logger.error('Error en getBoletasReservadas:', error);
+      return res.status(500).json({
+        success: false,
+        message: error.message || 'Error obteniendo boletas reservadas'
+      });
+    }
+  }
+
+  /**
+   * POST /api/admin/dashboard/boletas-reservadas/:boletaId/liberar
+   * 🔓 Liberar manualmente una boleta reservada
+   */
+  async liberarBoleta(req, res) {
+    try {
+      const { boletaId } = req.params;
+      const resultado = await dashboardService.liberarBoletaManual(boletaId);
+      return res.json({
+        success: true,
+        message: `Boleta #${resultado.numero} liberada exitosamente`,
+        data: resultado
+      });
+    } catch (error) {
+      logger.error(`Error liberando boleta ${req.params.boletaId}:`, error);
+      return res.status(400).json({
+        success: false,
+        message: error.message || 'Error liberando boleta'
+      });
+    }
+  }
+
+  /**
+   * POST /api/admin/dashboard/boletas-reservadas/venta/:ventaId/liberar
+   * 🔓 Liberar TODAS las boletas de una venta
+   */
+  async liberarBoletasDeVenta(req, res) {
+    try {
+      const { ventaId } = req.params;
+      const resultado = await dashboardService.liberarBoletasDeVenta(ventaId);
+      return res.json({
+        success: true,
+        message: `${resultado.boletas_liberadas} boletas liberadas exitosamente`,
+        data: resultado
+      });
+    } catch (error) {
+      logger.error(`Error liberando boletas de venta ${req.params.ventaId}:`, error);
+      return res.status(400).json({
+        success: false,
+        message: error.message || 'Error liberando boletas'
+      });
+    }
+  }
 }
 
 module.exports = new PublicDashboardController();

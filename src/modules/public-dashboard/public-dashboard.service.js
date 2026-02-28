@@ -376,6 +376,103 @@ class PublicDashboardService {
       throw error;
     }
   }
+
+  /**
+   * 🔔 Obtener SOLO ventas SIN_REVISAR (para banner de notificación)
+   */
+  async getVentasSinRevisar() {
+    try {
+      const result = await query(SQL_QUERIES.GET_VENTAS_SIN_REVISAR);
+      logger.info(`Obtenidas ${result.rows.length} ventas sin revisar`);
+      return result.rows;
+    } catch (error) {
+      logger.error('Error obteniendo ventas sin revisar:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 🎟️ Obtener todas las boletas reservadas (online + punto físico)
+   */
+  async getBoletasReservadas() {
+    try {
+      const result = await query(SQL_QUERIES.GET_BOLETAS_RESERVADAS);
+      logger.info(`Obtenidas ${result.rows.length} boletas reservadas`);
+      return result.rows;
+    } catch (error) {
+      logger.error('Error obteniendo boletas reservadas:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 🔓 Liberar una boleta reservada manualmente
+   */
+  async liberarBoletaManual(boletaId) {
+    const tx = await beginTransaction();
+    try {
+      // Liberar la boleta
+      const result = await tx.query(SQL_QUERIES.LIBERAR_BOLETA_MANUAL, [boletaId]);
+      
+      if (result.rows.length === 0) {
+        throw new Error('Boleta no encontrada o no está en estado RESERVADA');
+      }
+
+      const boleta = result.rows[0];
+
+      // Decrementar boletas_vendidas en la rifa
+      await tx.query(
+        `UPDATE rifas SET boletas_vendidas = GREATEST(boletas_vendidas - 1, 0), updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+        [boleta.rifa_id]
+      );
+
+      await tx.commit();
+      logger.info(`Boleta #${boleta.numero} liberada manualmente (rifa: ${boleta.rifa_id})`);
+      return boleta;
+    } catch (error) {
+      await tx.rollback();
+      logger.error('Error liberando boleta manual:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 🔓 Liberar TODAS las boletas de una venta y cancelar la venta
+   */
+  async liberarBoletasDeVenta(ventaId) {
+    const tx = await beginTransaction();
+    try {
+      // Liberar boletas
+      const boletas = await tx.query(SQL_QUERIES.LIBERAR_BOLETAS_DE_VENTA, [ventaId]);
+
+      if (boletas.rows.length === 0) {
+        throw new Error('No se encontraron boletas reservadas para esta venta');
+      }
+
+      // Cancelar la venta
+      await tx.query(SQL_QUERIES.CANCELAR_VENTA_SI_SIN_BOLETAS, [ventaId]);
+
+      // Decrementar boletas_vendidas en la rifa correspondiente
+      const ventaResult = await tx.query('SELECT rifa_id FROM ventas WHERE id = $1', [ventaId]);
+      if (ventaResult.rows.length > 0) {
+        await tx.query(
+          `UPDATE rifas SET boletas_vendidas = GREATEST(boletas_vendidas - $1, 0), updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
+          [boletas.rows.length, ventaResult.rows[0].rifa_id]
+        );
+      }
+
+      await tx.commit();
+      logger.info(`${boletas.rows.length} boletas liberadas de venta ${ventaId}`);
+      return {
+        boletas_liberadas: boletas.rows.length,
+        numeros: boletas.rows.map(b => b.numero)
+      };
+    } catch (error) {
+      await tx.rollback();
+      logger.error('Error liberando boletas de venta:', error);
+      throw error;
+    }
+  }
 }
 
 module.exports = new PublicDashboardService();
