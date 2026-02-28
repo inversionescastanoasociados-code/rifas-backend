@@ -79,7 +79,10 @@ app.use('/api/public', publicRoutes);
 app.use('/api/admin/dashboard', publicDashboardRoutes);
 app.use('/api/ventas-online', ventasOnlineRoutes);
 app.use('/api/verificar', verificarRoutes);
-app.use('/storage', require('express').static('storage'));
+
+// Servir imágenes: primero intenta filesystem, luego fallback a DB
+const { servirImagen } = require('./modules/uploads/uploads.controller');
+app.get('/storage/:filename', servirImagen);
 
 // 🔹 Iniciar job de liberación de boletas expiradas (cada 5 minutos)
 startBoletaExpirationJob(5 * 60 * 1000);
