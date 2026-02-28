@@ -1082,7 +1082,7 @@ async buscarBoletaParaAbono(numeroBoleta, rifaId = null) {
     FROM boletas b
     JOIN rifas r ON b.rifa_id = r.id
     WHERE b.numero = $1
-      AND b.estado IN ('RESERVADA', 'ABONADA', 'PENDIENTE', 'BLOQUEADA')
+      AND b.estado IN ('RESERVADA', 'ABONADA')
   `;
   const params = [numeroBoleta];
 
@@ -1336,6 +1336,16 @@ async getVentasPorCliente(clienteId) {
       [venta.id]
     );
 
+    // Obtener boletas de esta venta con su estado
+    const boletasResult = await query(
+      `SELECT b.id, b.numero, b.estado, r.nombre AS rifa_nombre
+       FROM boletas b
+       JOIN rifas r ON b.rifa_id = r.id
+       WHERE b.venta_id = $1
+       ORDER BY b.numero ASC`,
+      [venta.id]
+    );
+
     const totalPagado = Number(abonos.rows[0].total_pagado);
     const montoTotal = Number(venta.monto_total);
 
@@ -1347,7 +1357,13 @@ async getVentasPorCliente(clienteId) {
     ventasConSaldo.push({
       ...venta,
       total_pagado: totalPagado,
-      saldo_pendiente: saldoPendiente
+      saldo_pendiente: saldoPendiente,
+      boletas: boletasResult.rows.map(b => ({
+        id: b.id,
+        numero: b.numero,
+        estado: b.estado,
+        rifa_nombre: b.rifa_nombre
+      }))
     });
   }
 
