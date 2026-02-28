@@ -1,14 +1,24 @@
 const Joi = require('joi');
+const logger = require('../utils/logger');
 
 const validate = (schema) => {
   return (req, res, next) => {
-    const { error } = schema.validate(req.body);
+    const { error, value } = schema.validate(req.body, { 
+      stripUnknown: true,
+      abortEarly: false 
+    });
     
     if (error) {
       const errorDetails = error.details.map(detail => ({
         field: detail.path.join('.'),
         message: detail.message
       }));
+      
+      logger.warn('[Validation] Body rejected:', { 
+        path: req.path, 
+        body: JSON.stringify(req.body).substring(0, 500),
+        errors: errorDetails 
+      });
       
       return res.status(400).json({
         error: 'Validation Error',
@@ -17,6 +27,8 @@ const validate = (schema) => {
       });
     }
     
+    // Use the validated & stripped value
+    req.body = value;
     next();
   };
 };
