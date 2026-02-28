@@ -9,4 +9,11 @@ router.get(
   controller.getReporteRifa
 );
 
+// Listado general de ventas por rifa con filtros de fecha y paginación
+router.get(
+  '/rifa/:rifaId/ventas',
+  authenticateToken,
+  controller.getVentasGeneral
+);
+
 module.exports = router;

@@ -106,4 +106,47 @@ const getReporteRifa = async (rifaId, fechaInicio = null, fechaFin = null) => {
   };
 };
 
-module.exports = { getReporteRifa };
+/**
+ * Obtener listado general de ventas con toda la información
+ * Incluye: origen (online/punto_fisico), comprador, boletas, tipo transacción
+ */
+const getVentasGeneral = async (rifaId, fechaInicio = null, fechaFin = null, page = 1, limit = 50) => {
+  const offset = (page - 1) * limit;
+  const params3 = [rifaId, fechaInicio, fechaFin];
+
+  // Obtener ventas paginadas
+  const ventasResult = await query(SQL.GET_VENTAS_GENERAL, [...params3, limit, offset]);
+
+  // Obtener total para paginación
+  const countResult = await query(SQL.GET_VENTAS_GENERAL_COUNT, params3);
+
+  // Obtener resumen general
+  const resumenResult = await query(SQL.GET_VENTAS_GENERAL_RESUMEN, params3);
+
+  return {
+    ventas: ventasResult.rows.map(v => ({
+      ...v,
+      monto_total: Number(v.monto_total),
+      abono_total: Number(v.abono_total),
+      saldo_pendiente: Number(v.saldo_pendiente),
+      total_pagado_real: Number(v.total_pagado_real),
+      precio_boleta: Number(v.precio_boleta),
+      cantidad_boletas: Number(v.cantidad_boletas)
+    })),
+    resumen: {
+      total_ventas: Number(countResult.rows[0].total),
+      ...resumenResult.rows[0],
+      monto_total: Number(resumenResult.rows[0].monto_total),
+      total_abonado: Number(resumenResult.rows[0].total_abonado),
+      saldo_pendiente_total: Number(resumenResult.rows[0].saldo_pendiente_total)
+    },
+    paginacion: {
+      page: Number(page),
+      limit: Number(limit),
+      total: Number(countResult.rows[0].total),
+      total_pages: Math.ceil(Number(countResult.rows[0].total) / limit)
+    }
+  };
+};
+
+module.exports = { getReporteRifa, getVentasGeneral };

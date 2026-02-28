@@ -109,6 +109,87 @@ const SQL_QUERIES = {
     WHERE v.rifa_id = $1
       AND ($2::timestamptz IS NULL OR v.created_at >= $2::timestamptz)
       AND ($3::timestamptz IS NULL OR v.created_at < ($3::timestamptz + interval '1 day'))
+  `,
+
+  /**
+   * LISTADO GENERAL DE VENTAS con toda la información
+   * Params: $1=rifa_id, $2=fecha_inicio, $3=fecha_fin, $4=limit, $5=offset
+   */
+  GET_VENTAS_GENERAL: `
+    SELECT 
+      v.id,
+      v.rifa_id,
+      v.cliente_id,
+      v.monto_total,
+      v.abono_total,
+      (v.monto_total - v.abono_total) as saldo_pendiente,
+      v.estado_venta,
+      v.es_venta_online,
+      v.es_venta_admin,
+      v.notas_admin,
+      v.created_at,
+      v.updated_at,
+      c.nombre as cliente_nombre,
+      c.telefono as cliente_telefono,
+      c.email as cliente_email,
+      c.identificacion as cliente_identificacion,
+      c.direccion as cliente_direccion,
+      r.nombre as rifa_nombre,
+      r.precio_boleta,
+      COALESCE(u.nombre, 'Online') as vendedor_nombre,
+      CASE 
+        WHEN v.es_venta_online = true THEN 'ONLINE'
+        ELSE 'PUNTO_FISICO'
+      END as origen_venta,
+      ARRAY_AGG(b.numero ORDER BY b.numero) as numeros_boletas,
+      COUNT(b.id) as cantidad_boletas,
+      COALESCE(
+        (SELECT SUM(a.monto) FROM abonos a WHERE a.venta_id = v.id AND a.estado = 'CONFIRMADO'), 0
+      ) as total_pagado_real,
+      CASE
+        WHEN v.monto_total > 0 AND v.abono_total >= v.monto_total THEN 'PAGO_TOTAL'
+        WHEN v.monto_total > 0 AND v.abono_total > 0 AND v.abono_total < v.monto_total THEN 'ABONO'
+        WHEN v.estado_venta = 'PENDIENTE' OR v.estado_venta = 'SIN_REVISAR' THEN 'RESERVA'
+        ELSE 'SIN_PAGO'
+      END as tipo_transaccion
+    FROM ventas v
+    JOIN clientes c ON v.cliente_id = c.id
+    JOIN rifas r ON v.rifa_id = r.id
+    LEFT JOIN boletas b ON v.id = b.venta_id
+    LEFT JOIN usuarios u ON v.vendedor_id = u.id
+    WHERE v.rifa_id = $1
+      AND ($2::timestamptz IS NULL OR v.created_at >= $2::timestamptz)
+      AND ($3::timestamptz IS NULL OR v.created_at < ($3::timestamptz + interval '1 day'))
+    GROUP BY v.id, c.id, r.id, u.id
+    ORDER BY v.created_at DESC
+    LIMIT $4 OFFSET $5
+  `,
+
+  GET_VENTAS_GENERAL_COUNT: `
+    SELECT COUNT(*) as total
+    FROM ventas v
+    WHERE v.rifa_id = $1
+      AND ($2::timestamptz IS NULL OR v.created_at >= $2::timestamptz)
+      AND ($3::timestamptz IS NULL OR v.created_at < ($3::timestamptz + interval '1 day'))
+  `,
+
+  GET_VENTAS_GENERAL_RESUMEN: `
+    SELECT 
+      COUNT(*) as total_ventas,
+      COUNT(*) FILTER (WHERE v.estado_venta = 'PAGADA') as ventas_pagadas,
+      COUNT(*) FILTER (WHERE v.estado_venta = 'ABONADA') as ventas_abonadas,
+      COUNT(*) FILTER (WHERE v.estado_venta = 'PENDIENTE') as ventas_pendientes,
+      COUNT(*) FILTER (WHERE v.estado_venta = 'SIN_REVISAR') as ventas_sin_revisar,
+      COUNT(*) FILTER (WHERE v.estado_venta = 'CANCELADA') as ventas_canceladas,
+      COUNT(*) FILTER (WHERE v.es_venta_online = true) as ventas_online,
+      COUNT(*) FILTER (WHERE v.es_venta_online = false OR v.es_venta_online IS NULL) as ventas_punto_fisico,
+      COALESCE(SUM(v.monto_total), 0) as monto_total,
+      COALESCE(SUM(v.abono_total), 0) as total_abonado,
+      COALESCE(SUM(v.monto_total - v.abono_total), 0) as saldo_pendiente_total
+    FROM ventas v
+    WHERE v.rifa_id = $1
+      AND ($2::timestamptz IS NULL OR v.created_at >= $2::timestamptz)
+      AND ($3::timestamptz IS NULL OR v.created_at < ($3::timestamptz + interval '1 day'))
   `
 };
 
