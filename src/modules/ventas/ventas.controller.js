@@ -483,6 +483,36 @@ async getVentasPorCliente(req, res) {
   
 
 
+async buscarBoletaParaAbono(req, res) {
+  try {
+    const { numero, rifa_id } = req.query;
+
+    if (!numero) {
+      return res.status(400).json({
+        success: false,
+        message: 'El número de boleta es requerido'
+      });
+    }
+
+    const resultado = await ventaService.buscarBoletaParaAbono(
+      Number(numero),
+      rifa_id || null
+    );
+
+    res.json({
+      success: true,
+      data: resultado
+    });
+  } catch (error) {
+    logger.error('Error in buscarBoletaParaAbono controller:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error buscando boleta',
+      error: error.message
+    });
+  }
+}
+
 async registrarAbono(req, res) {
   try {
     const { id } = req.params;

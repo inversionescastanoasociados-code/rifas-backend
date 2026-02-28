@@ -1072,6 +1072,128 @@ class VentaService {
 
 
 
+///// BÚSQUEDA DE BOLETA PARA ABONO
+async buscarBoletaParaAbono(numeroBoleta, rifaId = null) {
+  // Buscar boleta por número, opcionalmente filtrando por rifa
+  let boletaQuery = `
+    SELECT b.id, b.numero, b.estado, b.venta_id, b.cliente_id, b.rifa_id,
+           b.bloqueo_hasta, b.qr_url, b.imagen_url,
+           r.nombre AS rifa_nombre, r.precio_boleta
+    FROM boletas b
+    JOIN rifas r ON b.rifa_id = r.id
+    WHERE b.numero = $1
+      AND b.estado IN ('RESERVADA', 'ABONADA', 'PENDIENTE', 'BLOQUEADA')
+  `;
+  const params = [numeroBoleta];
+
+  if (rifaId) {
+    boletaQuery += ` AND b.rifa_id = $2`;
+    params.push(rifaId);
+  }
+
+  boletaQuery += ` ORDER BY b.created_at DESC LIMIT 5`;
+
+  const boletaResult = await query(boletaQuery, params);
+
+  if (boletaResult.rows.length === 0) {
+    return { encontrada: false, mensaje: 'Boleta no encontrada o no tiene saldo pendiente' };
+  }
+
+  // Si hay varias (de diferentes rifas), retornar todas para que el frontend elija
+  const resultados = [];
+
+  for (const boleta of boletaResult.rows) {
+    if (!boleta.venta_id) continue;
+
+    // Get venta + client info
+    const ventaResult = await query(
+      `SELECT v.*, c.nombre AS cliente_nombre, c.telefono AS cliente_telefono,
+              c.email AS cliente_email, c.identificacion AS cliente_identificacion,
+              c.direccion AS cliente_direccion, c.id AS cliente_id
+       FROM ventas v
+       JOIN clientes c ON v.cliente_id = c.id
+       WHERE v.id = $1`,
+      [boleta.venta_id]
+    );
+
+    if (ventaResult.rows.length === 0) continue;
+    const venta = ventaResult.rows[0];
+    const montoTotal = Number(venta.monto_total);
+
+    // Get ALL boletas of this venta with financial details
+    const todasBoletasResult = await query(
+      `SELECT b.id, b.numero, b.estado, b.bloqueo_hasta, b.qr_url, b.imagen_url
+       FROM boletas b WHERE b.venta_id = $1 ORDER BY b.numero ASC`,
+      [boleta.venta_id]
+    );
+
+    const todasBoletas = todasBoletasResult.rows;
+    const cantidadBoletas = todasBoletas.length;
+    const precioBoleta = cantidadBoletas > 0 ? montoTotal / cantidadBoletas : Number(boleta.precio_boleta);
+
+    // Get abonos grouped by boleta
+    const abonosResult = await query(
+      `SELECT a.*, b.numero AS boleta_numero
+       FROM abonos a
+       JOIN boletas b ON a.boleta_id = b.id
+       WHERE a.venta_id = $1
+       ORDER BY a.created_at ASC`,
+      [boleta.venta_id]
+    );
+
+    const abonosPorBoleta = new Map();
+    for (const abono of abonosResult.rows) {
+      if (!abonosPorBoleta.has(abono.boleta_id)) {
+        abonosPorBoleta.set(abono.boleta_id, { total: 0, abonos: [] });
+      }
+      const entry = abonosPorBoleta.get(abono.boleta_id);
+      entry.total += Number(abono.monto);
+      entry.abonos.push({
+        id: abono.id, monto: Number(abono.monto), estado: abono.estado,
+        metodo_pago: abono.gateway_pago || 'N/A', notas: abono.notas, fecha: abono.created_at
+      });
+    }
+
+    const totalPagado = abonosResult.rows.reduce((sum, a) => sum + Number(a.monto), 0);
+
+    const boletasConFinanzas = todasBoletas.map(b => {
+      const entry = abonosPorBoleta.get(b.id) || { total: 0, abonos: [] };
+      return {
+        ...b, precio_boleta: precioBoleta,
+        total_pagado_boleta: entry.total,
+        saldo_pendiente_boleta: Math.max(precioBoleta - entry.total, 0),
+        abonos: entry.abonos
+      };
+    });
+
+    resultados.push({
+      boleta_buscada: boleta.numero,
+      rifa_nombre: boleta.rifa_nombre,
+      venta_id: venta.id,
+      estado_venta: venta.estado_venta,
+      created_at: venta.created_at,
+      cliente: {
+        id: venta.cliente_id,
+        nombre: venta.cliente_nombre,
+        telefono: venta.cliente_telefono,
+        email: venta.cliente_email,
+        identificacion: venta.cliente_identificacion,
+        direccion: venta.cliente_direccion
+      },
+      monto_total: montoTotal,
+      total_pagado: totalPagado,
+      saldo_pendiente: Math.max(montoTotal - totalPagado, 0),
+      boletas: boletasConFinanzas
+    });
+  }
+
+  if (resultados.length === 0) {
+    return { encontrada: false, mensaje: 'Boleta sin venta asociada' };
+  }
+
+  return { encontrada: true, resultados };
+}
+
 ///// FUNCIONES AVANZADAS PARA GESTIONAR VENTAS (MÓDULO GESTIONAR)
 async getVentaDetalleFinanciero(id) {
   // 1) Venta + cliente + rifa

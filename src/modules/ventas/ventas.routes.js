@@ -129,6 +129,14 @@ router.post(
 
 
 
+// 🔹 BUSCAR BOLETA PARA ABONAR (por número)
+router.get(
+  '/buscar-boleta-abono',
+  authenticateToken,
+  authorize(['SUPER_ADMIN', 'admin', 'vendedor']),
+  ventaController.buscarBoletaParaAbono
+);
+
 router.get('/', 
   authenticateToken, 
   authorize(['SUPER_ADMIN', 'admin']), 
