@@ -16,7 +16,8 @@ const SQL_QUERIES = {
       c.email as cliente_email,
       c.identificacion as cliente_identificacion,
       r.nombre as rifa_nombre,
-      ARRAY_LENGTH(ARRAY_AGG(b.id), 1) as cantidad_boletas
+      ARRAY_LENGTH(ARRAY_AGG(b.id), 1) as cantidad_boletas,
+      ARRAY_AGG(b.numero ORDER BY b.numero) as numeros_boletas
     FROM ventas v
     JOIN clientes c ON v.cliente_id = c.id
     JOIN rifas r ON v.rifa_id = r.id
@@ -42,7 +43,8 @@ const SQL_QUERIES = {
       c.email as cliente_email,
       c.identificacion as cliente_identificacion,
       r.nombre as rifa_nombre,
-      ARRAY_LENGTH(ARRAY_AGG(b.id), 1) as cantidad_boletas
+      ARRAY_LENGTH(ARRAY_AGG(b.id), 1) as cantidad_boletas,
+      ARRAY_AGG(b.numero ORDER BY b.numero) as numeros_boletas
     FROM ventas v
     JOIN clientes c ON v.cliente_id = c.id
     JOIN rifas r ON v.rifa_id = r.id

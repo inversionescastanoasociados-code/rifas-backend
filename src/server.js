@@ -2,6 +2,7 @@ const app = require('./app');
 const config = require('./config/env');
 const logger = require('./utils/logger');
 const { pool } = require('./db/pool');
+const { runMigrations } = require('./db/migrations');
 
 
 app.set("trust proxy", 1);
@@ -32,7 +33,9 @@ const startServer = async () => {
     });
 
     // Connect to DB after server is listening (with retries)
-    connectWithRetry().catch(err => logger.error('DB connection error:', err));
+    connectWithRetry()
+      .then(() => runMigrations())
+      .catch(err => logger.error('DB connection error:', err));
 
     const gracefulShutdown = (signal) => {
       logger.info(`Received ${signal}. Starting graceful shutdown...`);
