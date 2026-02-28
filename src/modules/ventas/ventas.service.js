@@ -85,7 +85,7 @@ class VentaService {
 
     for (const boletaId of boletas) {
       const boletaCheck = await tx.query(
-        `SELECT id, numero, estado
+        `SELECT id, numero, estado, qr_url, imagen_url
          FROM boletas
          WHERE id = $1 AND rifa_id = $2
          FOR UPDATE`,
@@ -104,7 +104,9 @@ class VentaService {
 
       boletasReservadas.push({
         id: boletaId,
-        numero: boleta.numero
+        numero: boleta.numero,
+        qr_url: boleta.qr_url || null,
+        imagen_url: boleta.imagen_url || null
       });
     }
 
@@ -171,6 +173,7 @@ class VentaService {
       reserva_id: venta.id,
       tipo: 'RESERVA_FORMAL',
       rifa_id,
+      rifa_nombre: rifa.nombre,
       cliente_id: clienteId,
       cantidad_boletas: cantidadBoletas,
       monto_total: montoTotal,
@@ -609,12 +612,23 @@ class VentaService {
 
       await tx.commit();
 
+      // Obtener boletas vendidas con datos para impresión
+      const boletasVendidas = await query(
+        `SELECT b.id, b.numero, b.estado, b.qr_url, b.imagen_url
+         FROM boletas b
+         WHERE b.venta_id = $1
+         ORDER BY b.numero ASC`,
+        [venta.id]
+      );
+
       return {
         ...venta,
+        cliente_nombre: cliente.nombre,
         total_venta,
         total_pagado,
         saldo_pendiente,
-        boletas_vendidas: boletas.length
+        boletas_vendidas: boletas.length,
+        boletas: boletasVendidas.rows
       };
 
     } catch (error) {
