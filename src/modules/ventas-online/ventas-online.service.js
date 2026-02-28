@@ -233,10 +233,9 @@ class VentasOnlineService {
       // ══════════════════════════════════
       //  PASO 2: Buscar o crear cliente
       // ══════════════════════════════════
-      // Igual que el módulo de ventas del dashboard:
-      // 1. Buscar por teléfono
-      // 2. Si no encuentra, buscar por cédula
-      // 3. Si encuentra → usar ese cliente existente
+      // 1. Buscar por cédula (identificacion) - es el único campo UNIQUE
+      // 2. Si no encuentra, buscar por teléfono como fallback
+      // 3. Si encuentra → usar ese cliente existente y actualizar datos
       // 4. Si no encuentra → crear uno nuevo
       if (!cliente || !cliente.nombre || !cliente.telefono) {
         throw new Error('Nombre y teléfono del cliente son obligatorios');
@@ -245,19 +244,35 @@ class VentasOnlineService {
       let clienteId;
       let clienteNuevo = true;
 
-      // Buscar por teléfono
-      let clienteResult = await tx.query(SQL.GET_CLIENTE_BY_TELEFONO, [cliente.telefono.trim()]);
-
-      // Si no encuentra por teléfono, buscar por cédula
-      if (clienteResult.rows.length === 0 && cliente.identificacion) {
+      // Buscar por identificación primero (es UNIQUE)
+      let clienteResult = { rows: [] };
+      if (cliente.identificacion && cliente.identificacion.trim()) {
         clienteResult = await tx.query(SQL.GET_CLIENTE_BY_IDENTIFICACION, [cliente.identificacion.trim()]);
       }
 
+      // Si no encuentra por identificación, buscar por teléfono como fallback
+      if (clienteResult.rows.length === 0) {
+        clienteResult = await tx.query(SQL.GET_CLIENTE_BY_TELEFONO, [cliente.telefono.trim()]);
+      }
+
       if (clienteResult.rows.length > 0) {
-        // Cliente existente encontrado → usarlo
+        // Cliente existente encontrado → usarlo y actualizar datos
         clienteId = clienteResult.rows[0].id;
         clienteNuevo = false;
-        logger.info(`[VentasOnline] Cliente existente encontrado: ${clienteId} - ${clienteResult.rows[0].nombre}`);
+        
+        // Actualizar datos del cliente existente
+        await tx.query(
+          `UPDATE clientes SET nombre = $1, telefono = $2, email = $3, identificacion = $4, direccion = $5 WHERE id = $6`,
+          [
+            cliente.nombre.trim(),
+            cliente.telefono.trim(),
+            cliente.email ? cliente.email.trim().toLowerCase() : clienteResult.rows[0].email,
+            cliente.identificacion ? cliente.identificacion.trim() : clienteResult.rows[0].identificacion,
+            cliente.direccion ? cliente.direccion.trim() : clienteResult.rows[0].direccion,
+            clienteId
+          ]
+        );
+        logger.info(`[VentasOnline] Cliente existente encontrado y actualizado: ${clienteId} - ${clienteResult.rows[0].nombre}`);
       } else {
         // Cliente nuevo → crearlo
         const newCliente = await tx.query(SQL.CREATE_CLIENTE, [

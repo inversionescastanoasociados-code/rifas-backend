@@ -18,16 +18,10 @@ class ClienteService {
       return result.rows[0];
       
     } catch (error) {
-      // Manejar errores de unicidad
+      // Manejar errores de unicidad (solo identificacion es único)
       if (error.code === '23505') {
-        if (error.constraint === 'clientes_email_key') {
-          throw new Error('Email already exists');
-        }
-        if (error.constraint === 'clientes_telefono_key') {
-          throw new Error('Phone number already exists');
-        }
         if (error.constraint === 'clientes_identificacion_key') {
-          throw new Error('Identification already exists');
+          throw new Error('Ya existe un cliente con esa cédula/identificación');
         }
       }
       logger.error('Error in createCliente service:', error);

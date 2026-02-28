@@ -45,23 +45,33 @@ class VentaService {
       throw new Error('Precio de boleta inválido en la rifa');
     }
 
-    // 🔹 2️⃣ Buscar o crear cliente
+    // 🔹 2️⃣ Buscar o crear cliente (identificacion es el único campo único)
     let clienteId;
+    let clienteResult = { rows: [] };
 
-    let clienteResult = await tx.query(
-      'SELECT id FROM clientes WHERE telefono = $1 LIMIT 1',
-      [cliente.telefono]
-    );
-
-    if (clienteResult.rows.length === 0 && cliente.identificacion) {
+    // Primero buscar por identificación (campo único)
+    if (cliente.identificacion && cliente.identificacion.trim()) {
       clienteResult = await tx.query(
         'SELECT id FROM clientes WHERE identificacion = $1 LIMIT 1',
-        [cliente.identificacion]
+        [cliente.identificacion.trim()]
+      );
+    }
+
+    // Fallback: buscar por teléfono
+    if (clienteResult.rows.length === 0) {
+      clienteResult = await tx.query(
+        'SELECT id FROM clientes WHERE telefono = $1 LIMIT 1',
+        [cliente.telefono]
       );
     }
 
     if (clienteResult.rows.length > 0) {
       clienteId = clienteResult.rows[0].id;
+      // Actualizar datos del cliente existente
+      await tx.query(
+        `UPDATE clientes SET nombre = $1, telefono = $2, email = $3, direccion = $4, updated_at = CURRENT_TIMESTAMP WHERE id = $5`,
+        [cliente.nombre, cliente.telefono, cliente.email || null, cliente.direccion || null, clienteId]
+      );
     } else {
       const newCliente = await tx.query(
         `INSERT INTO clientes 
@@ -424,23 +434,33 @@ class VentaService {
 
       const precioBoleta = Number(rifaResult.rows[0].precio_boleta);
 
-      // 🔹 2️⃣ Buscar o crear cliente
+      // 🔹 2️⃣ Buscar o crear cliente (identificacion es el único campo único)
       let clienteId;
+      let clienteResult = { rows: [] };
 
-      let clienteResult = await tx.query(
-        'SELECT id FROM clientes WHERE telefono = $1 LIMIT 1',
-        [cliente.telefono]
-      );
-
-      if (clienteResult.rows.length === 0 && cliente.identificacion) {
+      // Primero buscar por identificación (campo único)
+      if (cliente.identificacion && cliente.identificacion.trim()) {
         clienteResult = await tx.query(
           'SELECT id FROM clientes WHERE identificacion = $1 LIMIT 1',
-          [cliente.identificacion]
+          [cliente.identificacion.trim()]
+        );
+      }
+
+      // Fallback: buscar por teléfono
+      if (clienteResult.rows.length === 0) {
+        clienteResult = await tx.query(
+          'SELECT id FROM clientes WHERE telefono = $1 LIMIT 1',
+          [cliente.telefono]
         );
       }
 
       if (clienteResult.rows.length > 0) {
         clienteId = clienteResult.rows[0].id;
+        // Actualizar datos del cliente existente
+        await tx.query(
+          `UPDATE clientes SET nombre = $1, telefono = $2, email = $3, direccion = $4, updated_at = CURRENT_TIMESTAMP WHERE id = $5`,
+          [cliente.nombre, cliente.telefono, cliente.email || null, cliente.direccion || null, clienteId]
+        );
       } else {
         const newCliente = await tx.query(
           `INSERT INTO clientes 

@@ -10,9 +10,9 @@ const createVentaSchema = Joi.object({
   cliente: Joi.object({
     nombre: Joi.string().required().max(200),
     telefono: Joi.string().required().max(20),
-    email: Joi.string().email().optional().max(100),
-    direccion: Joi.string().optional().max(300),
-    identificacion: Joi.string().optional().max(20)
+    email: Joi.string().email().optional().allow('', null).max(100),
+    direccion: Joi.string().optional().allow('', null).max(300),
+    identificacion: Joi.string().optional().allow('', null).max(20)
   }).required(),
   boletas: Joi.array().items(
     Joi.object({
@@ -37,16 +37,16 @@ const crearReservaSchema = Joi.object({
   cliente: Joi.object({
     nombre: Joi.string().required().max(200),
     telefono: Joi.string().required().max(20),
-    email: Joi.string().email().optional().max(100),
-    direccion: Joi.string().optional().max(300),
-    identificacion: Joi.string().optional().max(20)
+    email: Joi.string().email().optional().allow('', null).max(100),
+    direccion: Joi.string().optional().allow('', null).max(300),
+    identificacion: Joi.string().optional().allow('', null).max(20)
   }).required(),
   boletas: Joi.array()
     .items(Joi.string().uuid())
     .min(1)
     .required(),
-  dias_bloqueo: Joi.number().integer().positive().default(3).max(30),
-  notas: Joi.string().optional().max(500)
+  dias_bloqueo: Joi.number().integer().positive().default(3).max(365),
+  notas: Joi.string().optional().allow('', null).max(500)
 });
 
 const convertirReservaSchema = Joi.object({

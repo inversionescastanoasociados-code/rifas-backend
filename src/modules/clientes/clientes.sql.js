@@ -5,14 +5,12 @@ const createClientesTable = `
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     nombre VARCHAR(255) NOT NULL,
     telefono VARCHAR(20) NOT NULL,
-    email VARCHAR(255) NOT NULL,
-    identificacion VARCHAR(50) NOT NULL,
+    email VARCHAR(255),
+    identificacion VARCHAR(50),
     direccion TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     
-    CONSTRAINT clientes_email_key UNIQUE (email),
-    CONSTRAINT clientes_telefono_key UNIQUE (telefono),
     CONSTRAINT clientes_identificacion_key UNIQUE (identificacion)
   );
 `;
