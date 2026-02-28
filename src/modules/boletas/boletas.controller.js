@@ -277,6 +277,34 @@ class BoletaController {
     }
   }
 
+  async desbloquearMultiples(req, res) {
+    try {
+      const { boletas } = req.body;
+
+      if (!Array.isArray(boletas) || boletas.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Se requiere un array de boletas con id y reserva_token'
+        });
+      }
+
+      const resultados = await boletaService.desbloquearMultiples(boletas);
+
+      res.json({
+        success: true,
+        message: `${resultados.filter(r => r.success).length}/${resultados.length} boletas desbloqueadas`,
+        data: resultados
+      });
+    } catch (error) {
+      logger.error('Error in desbloquearMultiples controller:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error desbloqueando boletas',
+        error: error.message
+      });
+    }
+  }
+
   async verificarBloqueo(req, res) {
     try {
       const { id } = req.params;

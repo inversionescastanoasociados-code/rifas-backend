@@ -69,6 +69,12 @@ router.get('/rifa/:rifa_id',
   boletaController.getBoletasByRifa
 );
 
+router.post('/unblock-multiple',
+  authenticateToken,
+  authorize(['SUPER_ADMIN', 'admin', 'vendedor']),
+  boletaController.desbloquearMultiples
+);
+
 router.get('/rifa/:rifa_id/available', 
   authenticateToken, 
   validateParams(rifaIdSchema), 

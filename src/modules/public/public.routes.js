@@ -44,4 +44,11 @@ router.post('/boletas/:id/bloquear', publicController.bloquearBoleta);
  */
 router.post('/ventas', publicController.crearVentaPublica);
 
+/**
+ * 🎫 GET /api/public/cliente/:identificacion/boletas
+ * Obtener boletas compradas por un cliente (para link de descarga en WhatsApp)
+ * Query params: ?rifa_id=xxx (opcional, filtrar por rifa)
+ */
+router.get('/cliente/:identificacion/boletas', publicController.getBoletasCliente);
+
 module.exports = router;

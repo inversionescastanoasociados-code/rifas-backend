@@ -157,6 +157,39 @@ class PublicController {
     }
   }
 
+  /**
+   * GET /api/public/cliente/:identificacion/boletas
+   * 🎫 Obtener boletas de un cliente por su cédula/identificación
+   * Para el link de WhatsApp de descarga de boletas
+   */
+  async getBoletasCliente(req, res) {
+    try {
+      const { identificacion } = req.params;
+      const { rifa_id } = req.query;
+
+      if (!identificacion) {
+        return res.status(400).json({
+          success: false,
+          message: 'Identificación del cliente es requerida'
+        });
+      }
+
+      const resultado = await publicService.getBoletasCliente(identificacion, rifa_id);
+
+      return res.json({
+        success: true,
+        data: resultado
+      });
+
+    } catch (error) {
+      logger.error(`Error en getBoletasCliente para ${req.params.identificacion}:`, error);
+      return res.status(400).json({
+        success: false,
+        message: error.message || 'Error obteniendo boletas del cliente'
+      });
+    }
+  }
+
 }
 
 module.exports = new PublicController();

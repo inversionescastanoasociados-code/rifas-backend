@@ -331,6 +331,105 @@ class PublicService {
 
   }
 
+  /**
+   * 🎫 Obtener boletas de un cliente por identificación
+   * Devuelve las boletas con estado de pago, info de rifa, QR, etc.
+   */
+  async getBoletasCliente(identificacion, rifaId = null) {
+    try {
+      let sql = `
+        SELECT 
+          b.id,
+          b.numero,
+          b.estado,
+          b.qr_url,
+          b.barcode,
+          b.imagen_url,
+          b.bloqueo_hasta,
+          r.id as rifa_id,
+          r.nombre as rifa_nombre,
+          r.precio_boleta,
+          r.fecha_sorteo,
+          r.premio_principal,
+          c.nombre as cliente_nombre,
+          c.telefono as cliente_telefono,
+          c.identificacion as cliente_identificacion,
+          c.email as cliente_email,
+          v.id as venta_id,
+          v.estado_venta,
+          COALESCE((
+            SELECT SUM(a.monto) FROM abonos a WHERE a.venta_id = v.id AND a.boleta_id = b.id
+          ), 0) as total_pagado_boleta
+        FROM boletas b
+        JOIN rifas r ON b.rifa_id = r.id
+        JOIN clientes c ON b.cliente_id = c.id
+        LEFT JOIN ventas v ON b.venta_id = v.id
+        WHERE c.identificacion = $1
+          AND b.estado NOT IN ('DISPONIBLE', 'ANULADA', 'CANCELADA')
+      `;
+      const params = [identificacion];
+
+      if (rifaId) {
+        sql += ` AND r.id = $2`;
+        params.push(rifaId);
+      }
+
+      sql += ` ORDER BY r.nombre, b.numero`;
+
+      const result = await query(sql, params);
+
+      // Agrupar por rifa
+      const rifasMap = {};
+      for (const row of result.rows) {
+        if (!rifasMap[row.rifa_id]) {
+          rifasMap[row.rifa_id] = {
+            rifa_id: row.rifa_id,
+            rifa_nombre: row.rifa_nombre,
+            precio_boleta: parseFloat(row.precio_boleta) || 0,
+            fecha_sorteo: row.fecha_sorteo,
+            premio_principal: row.premio_principal,
+            boletas: []
+          };
+        }
+
+        const precioBoleta = parseFloat(row.precio_boleta) || 0;
+        const totalPagado = parseFloat(row.total_pagado_boleta) || 0;
+
+        rifasMap[row.rifa_id].boletas.push({
+          id: row.id,
+          numero: row.numero,
+          estado: row.estado,
+          qr_url: row.qr_url,
+          barcode: row.barcode,
+          imagen_url: row.imagen_url,
+          bloqueo_hasta: row.bloqueo_hasta,
+          venta_id: row.venta_id,
+          estado_venta: row.estado_venta,
+          precio_boleta: precioBoleta,
+          total_pagado: totalPagado,
+          saldo_pendiente: Math.max(precioBoleta - totalPagado, 0)
+        });
+      }
+
+      const cliente = result.rows.length > 0 ? {
+        nombre: result.rows[0].cliente_nombre,
+        telefono: result.rows[0].cliente_telefono,
+        identificacion: result.rows[0].cliente_identificacion,
+        email: result.rows[0].cliente_email
+      } : null;
+
+      return {
+        cliente,
+        rifas: Object.values(rifasMap),
+        total_boletas: result.rows.length
+      };
+
+    } catch (error) {
+      logger.error(`Error obteniendo boletas del cliente ${identificacion}:`, error);
+      throw error;
+    }
+  }
+
 }
 
 module.exports = new PublicService();

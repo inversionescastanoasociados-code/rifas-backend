@@ -244,6 +244,20 @@ class BoletaService {
     }
   }
 
+  async desbloquearMultiples(boletas) {
+    const resultados = [];
+    for (const { id, reserva_token } of boletas) {
+      try {
+        await this.desbloquearBoleta(id, reserva_token);
+        resultados.push({ id, success: true });
+      } catch (error) {
+        logger.warn(`Error desbloqueando boleta ${id}: ${error.message}`);
+        resultados.push({ id, success: false, error: error.message });
+      }
+    }
+    return resultados;
+  }
+
   async verificarBloqueo(boletaId, reservaToken) {
     try {
       const result = await query(
