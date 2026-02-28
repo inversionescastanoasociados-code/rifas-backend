@@ -335,7 +335,7 @@ class VentasOnlineService {
       return {
         reserva_token: reserva_token, // El cliente usa este token para consultar estado
         venta_id: venta.id,
-        estado: 'PENDIENTE',
+        estado: 'SIN_REVISAR',
         monto_total: montoTotal,
         boletas: boletasAsignadas.rows.map(b => b.numero),
         cantidad_boletas: cantidadBoletas,

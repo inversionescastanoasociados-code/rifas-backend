@@ -166,6 +166,38 @@ class PublicDashboardController {
   }
 
   /**
+   * POST /api/admin/dashboard/ventas-publicas/:ventaId/marcar-revisada
+   * ✅ Marcar venta como revisada (SIN_REVISAR → PENDIENTE)
+   */
+  async marcarRevisada(req, res) {
+    try {
+      const { ventaId } = req.params;
+
+      if (!ventaId) {
+        return res.status(400).json({
+          success: false,
+          message: 'ventaId es requerido'
+        });
+      }
+
+      const resultado = await dashboardService.marcarRevisada(ventaId);
+
+      return res.json({
+        success: true,
+        message: 'Venta marcada como revisada',
+        data: resultado
+      });
+    } catch (error) {
+      logger.error(`Error marcando venta ${req.params.ventaId} como revisada:`, error);
+      
+      return res.status(400).json({
+        success: false,
+        message: error.message || 'Error al marcar venta como revisada'
+      });
+    }
+  }
+
+  /**
    * GET /api/admin/dashboard/estadisticas
    * 📊 Obtener estadísticas generales de ventas públicas
    */

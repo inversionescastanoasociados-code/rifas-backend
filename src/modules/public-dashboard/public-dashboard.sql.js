@@ -48,7 +48,7 @@ const SQL_QUERIES = {
     JOIN rifas r ON v.rifa_id = r.id
     LEFT JOIN boletas b ON v.id = b.venta_id
     WHERE v.es_venta_online = true 
-      AND (v.estado_venta = 'PENDIENTE' OR v.estado_venta = 'ABONADA')
+      AND (v.estado_venta = 'SIN_REVISAR' OR v.estado_venta = 'PENDIENTE' OR v.estado_venta = 'ABONADA')
     GROUP BY v.id, c.id, r.id
     ORDER BY v.created_at DESC
   `,
@@ -144,6 +144,7 @@ const SQL_QUERIES = {
       COUNT(CASE WHEN estado_venta = 'PAGADA' THEN 1 END) as ventas_pagadas,
       COUNT(CASE WHEN estado_venta = 'ABONADA' THEN 1 END) as ventas_abonadas,
       COUNT(CASE WHEN estado_venta = 'PENDIENTE' THEN 1 END) as ventas_pendientes,
+      COUNT(CASE WHEN estado_venta = 'SIN_REVISAR' THEN 1 END) as ventas_sin_revisar,
       COALESCE(SUM(abono_total), 0) as total_abonado,
       COALESCE(SUM(monto_total), 0) as total_venta,
       COALESCE(SUM(monto_total - abono_total), 0) as saldo_pendiente_total
@@ -173,6 +174,17 @@ const SQL_QUERIES = {
     SET estado_venta = 'CANCELADA',
         updated_at = CURRENT_TIMESTAMP
     WHERE id = $1
+    RETURNING *
+  `,
+
+  // MARCAR VENTA COMO REVISADA (SIN_REVISAR → PENDIENTE)
+  MARK_VENTA_REVISADA: `
+    UPDATE ventas
+    SET estado_venta = 'PENDIENTE',
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = $1
+      AND estado_venta = 'SIN_REVISAR'
+      AND es_venta_online = true
     RETURNING *
   `
 };

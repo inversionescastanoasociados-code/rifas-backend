@@ -76,8 +76,8 @@ class PublicDashboardService {
 
       if (extraConditions.length > 0) {
         sql = sql.replace(
-          "AND (v.estado_venta = 'PENDIENTE' OR v.estado_venta = 'ABONADA')",
-          `AND (v.estado_venta = 'PENDIENTE' OR v.estado_venta = 'ABONADA') AND ${extraConditions.join(' AND ')}`
+          "AND (v.estado_venta = 'SIN_REVISAR' OR v.estado_venta = 'PENDIENTE' OR v.estado_venta = 'ABONADA')",
+          `AND (v.estado_venta = 'SIN_REVISAR' OR v.estado_venta = 'PENDIENTE' OR v.estado_venta = 'ABONADA') AND ${extraConditions.join(' AND ')}`
         );
       }
 
@@ -316,6 +316,35 @@ class PublicDashboardService {
     } catch (error) {
       await tx.rollback();
       logger.error(`Error cancelando venta ${ventaId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * ✅ Marcar venta como revisada (SIN_REVISAR → PENDIENTE)
+   * Se usa cuando el admin envía el WhatsApp de recordatorio
+   */
+  async marcarRevisada(ventaId) {
+    try {
+      if (!ventaId) {
+        throw new Error('ventaId es requerido');
+      }
+
+      const result = await query(SQL_QUERIES.MARK_VENTA_REVISADA, [ventaId]);
+
+      if (result.rows.length === 0) {
+        throw new Error('Venta no encontrada o ya fue revisada');
+      }
+
+      logger.info(`Venta ${ventaId} marcada como revisada (SIN_REVISAR → PENDIENTE)`);
+
+      return {
+        success: true,
+        message: 'Venta marcada como revisada',
+        venta_id: ventaId
+      };
+    } catch (error) {
+      logger.error(`Error marcando venta ${ventaId} como revisada:`, error);
       throw error;
     }
   }

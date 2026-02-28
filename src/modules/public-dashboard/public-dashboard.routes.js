@@ -41,6 +41,13 @@ router.get('/ventas-publicas/:ventaId', dashboardController.getVentaPublicaDetai
 router.post('/abonos/:abonoId/confirmar', dashboardController.confirmarPago);
 
 /**
+ * ✅ POST /api/admin/dashboard/ventas-publicas/:ventaId/marcar-revisada
+ * Marcar una venta como revisada (SIN_REVISAR → PENDIENTE)
+ * Se usa cuando el admin envía el WhatsApp de recordatorio al cliente
+ */
+router.post('/ventas-publicas/:ventaId/marcar-revisada', dashboardController.marcarRevisada);
+
+/**
  * ❌ POST /api/admin/dashboard/ventas-publicas/:ventaId/cancelar
  * Cancelar una venta pública completa
  * Cuando se cancela:

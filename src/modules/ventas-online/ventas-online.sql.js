@@ -147,7 +147,7 @@ const SQL_QUERIES = {
       created_at,
       updated_at
     )
-    VALUES ($1, $2, $3, 0, 'PENDIENTE', true, $4, $5, $6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    VALUES ($1, $2, $3, 0, 'SIN_REVISAR', true, $4, $5, $6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     RETURNING id, rifa_id, cliente_id, monto_total, saldo_pendiente, estado_venta, expires_at, created_at
   `,
 
