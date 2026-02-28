@@ -1040,11 +1040,13 @@ class VentaService {
 
 ///// FUNCIONES AVANZADAS PARA GESTIONAR VENTAS (MÓDULO GESTIONAR)
 async getVentaDetalleFinanciero(id) {
-  // 1) Venta + cliente
+  // 1) Venta + cliente + rifa
   const ventaResult = await query(
-    `SELECT v.*, c.nombre, c.telefono
+    `SELECT v.*, c.nombre, c.telefono, c.identificacion AS cliente_identificacion,
+            r.nombre AS rifa_nombre
      FROM ventas v
      JOIN clientes c ON v.cliente_id = c.id
+     LEFT JOIN rifas r ON v.rifa_id = r.id
      WHERE v.id = $1`,
     [id]
   );
@@ -1076,9 +1078,9 @@ const totalPagado = abonos.reduce(
   const montoTotal = Number(venta.monto_total);
   const saldoPendienteTotal = Math.max(montoTotal - totalPagado, 0);
 
-  // 3) Boletas de esta venta (incluyendo numero y bloqueo_hasta)
+  // 3) Boletas de esta venta (incluyendo numero, bloqueo_hasta, qr_url, imagen_url)
   const boletasResult = await query(
-    `SELECT id, numero, estado, bloqueo_hasta
+    `SELECT id, numero, estado, bloqueo_hasta, qr_url, imagen_url
      FROM boletas
      WHERE venta_id = $1
      ORDER BY numero ASC`,
@@ -1143,6 +1145,10 @@ const totalPagado = abonos.reduce(
     // del JOIN con clientes
     nombre: venta.nombre,
     telefono: venta.telefono,
+    cliente_nombre: venta.nombre,
+    cliente_identificacion: venta.cliente_identificacion,
+    // del JOIN con rifas
+    rifa_nombre: venta.rifa_nombre,
     // totales generales
     total_pagado: totalPagado,
     saldo_pendiente: saldoPendienteTotal,
