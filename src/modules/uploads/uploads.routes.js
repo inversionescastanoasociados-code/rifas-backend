@@ -11,4 +11,18 @@ router.post('/imagen',
 	uploadsController.subirImagen
 );
 
+// POST /api/uploads/sync — sincronizar imágenes del filesystem a la DB
+router.post('/sync',
+	authenticateToken,
+	uploadsController.sincronizarManual
+);
+
+// POST /api/uploads/restore — restaurar una imagen con nombre específico
+// Body: { filename: "rifa-xxx.jpeg" }, File: imagen
+router.post('/restore',
+	authenticateToken,
+	upload.single('imagen'),
+	uploadsController.restaurarImagen
+);
+
 module.exports = router;

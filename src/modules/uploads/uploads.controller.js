@@ -159,8 +159,60 @@ async function sincronizarImagenesExistentes() {
 // Ejecutar sincronización al iniciar
 setTimeout(() => sincronizarImagenesExistentes(), 5000);
 
+/**
+ * Endpoint manual para sincronizar (POST /api/uploads/sync)
+ */
+const sincronizarManual = async (req, res) => {
+	try {
+		await sincronizarImagenesExistentes();
+		const result = await query('SELECT COUNT(*) as total FROM imagenes_storage');
+		res.json({ ok: true, message: 'Sincronización completada', total_en_db: parseInt(result.rows[0].total) });
+	} catch (err) {
+		logger.error('Error en sincronización manual:', err.message);
+		res.status(500).json({ ok: false, message: err.message });
+	}
+};
+
+/**
+ * Restaurar una imagen con nombre específico (POST /api/uploads/restore)
+ * Guarda el archivo subido con el nombre especificado en query/body
+ */
+const restaurarImagen = async (req, res) => {
+	try {
+		if (!req.file) {
+			return res.status(400).json({ ok: false, message: 'No se recibió ninguna imagen' });
+		}
+
+		const targetFilename = req.body.filename || req.query.filename;
+		if (!targetFilename) {
+			return res.status(400).json({ ok: false, message: 'Se requiere el parámetro filename' });
+		}
+
+		const STORAGE_DIR = path.join(process.cwd(), 'storage');
+		const targetPath = path.join(STORAGE_DIR, targetFilename);
+
+		// Mover/renombrar el archivo subido
+		fs.renameSync(req.file.path, targetPath);
+
+		// Guardar en DB
+		const mimeType = req.file.mimetype || 'image/jpeg';
+		await guardarImagenEnDB(targetFilename, targetPath, mimeType);
+
+		const protocol = req.protocol;
+		const host = req.get('host');
+		const url = `${protocol}://${host}/storage/${targetFilename}`;
+
+		return res.json({ ok: true, url, filename: targetFilename });
+	} catch (err) {
+		logger.error('Error restaurando imagen:', err.message);
+		return res.status(500).json({ ok: false, message: err.message });
+	}
+};
+
 module.exports = {
 	subirImagen,
-	servirImagen
+	servirImagen,
+	sincronizarManual,
+	restaurarImagen
 };
 
