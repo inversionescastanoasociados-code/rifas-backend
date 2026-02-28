@@ -24,9 +24,17 @@ echo "📁 Subiendo imágenes desde: $STORAGE_DIR"
 echo ""
 
 COUNT=0
-for file in "$STORAGE_DIR"/*.{jpg,jpeg,png,webp,gif} 2>/dev/null; do
+for file in "$STORAGE_DIR"/*; do
   [ -f "$file" ] || continue
   FILENAME=$(basename "$file")
+  EXT="${FILENAME##*.}"
+  EXT_LOWER=$(echo "$EXT" | tr '[:upper:]' '[:lower:]')
+  
+  # Solo procesar imágenes
+  case "$EXT_LOWER" in
+    jpg|jpeg|png|webp|gif) ;;
+    *) continue ;;
+  esac
   
   echo -n "  📷 $FILENAME... "
   
