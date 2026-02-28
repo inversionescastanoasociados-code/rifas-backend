@@ -516,7 +516,7 @@ async buscarBoletaParaAbono(req, res) {
 async registrarAbono(req, res) {
   try {
     const { id } = req.params;
-    const { monto, metodo_pago, notas, boleta_id } = req.body;
+    const { monto, metodo_pago, notas, boleta_id, boletas_abono } = req.body;
 
     if (!monto || monto <= 0) {
       return res.status(400).json({
@@ -536,15 +536,28 @@ async registrarAbono(req, res) {
 
     const medioPagoId = metodoPagoMap[metodo_pago] || metodoPagoMap.efectivo;
 
-    const venta = await ventaService.registrarAbonoVenta(
-      id,
-      Number(monto),
-      medioPagoId,
-      'COP',
-      req.user.id,
-      notas,
-      boleta_id || null
-    );
+    // MODO MULTI-BOLETA: Si viene boletas_abono, procesar múltiples boletas en una transacción
+    let venta;
+    if (boletas_abono && Array.isArray(boletas_abono) && boletas_abono.length > 0) {
+      venta = await ventaService.registrarAbonoMultiBoleta(
+        id,
+        boletas_abono,
+        medioPagoId,
+        'COP',
+        req.user.id,
+        notas
+      );
+    } else {
+      venta = await ventaService.registrarAbonoVenta(
+        id,
+        Number(monto),
+        medioPagoId,
+        'COP',
+        req.user.id,
+        notas,
+        boleta_id || null
+      );
+    }
 
     res.json({
       success: true,

@@ -1072,6 +1072,108 @@ class VentaService {
 
 
 
+///// ABONO MULTI-BOLETA (varias boletas en una sola transacción)
+async registrarAbonoMultiBoleta(ventaId, boletasAbono, medioPagoId, moneda, userId, notas) {
+  const tx = await beginTransaction();
+
+  try {
+    // 1) Verificar venta
+    const ventaResult = await tx.query(
+      `SELECT * FROM ventas WHERE id = $1 FOR UPDATE`,
+      [ventaId]
+    );
+    if (ventaResult.rows.length === 0) throw new Error('Venta no encontrada');
+    const venta = ventaResult.rows[0];
+    const montoTotal = Number(venta.monto_total || 0);
+
+    // 2) Obtener nombre medio de pago
+    let gatewayPagoNombre = null;
+    if (medioPagoId) {
+      const mp = await tx.query(`SELECT nombre FROM medios_pago WHERE id = $1`, [medioPagoId]);
+      if (mp.rows.length > 0) gatewayPagoNombre = mp.rows[0].nombre;
+    }
+
+    // 3) Obtener boletas de la venta
+    const boletasResult = await tx.query(
+      `SELECT id, numero, estado FROM boletas WHERE venta_id = $1 ORDER BY numero ASC`,
+      [ventaId]
+    );
+    if (boletasResult.rows.length === 0) throw new Error('La venta no tiene boletas asociadas');
+    const boletas = boletasResult.rows;
+    const cantidadBoletas = boletas.length;
+    const precioBoleta = montoTotal / cantidadBoletas;
+
+    // 4) Procesar cada boleta del array
+    for (const item of boletasAbono) {
+      const { boleta_id, monto } = item;
+      const montoNum = Number(monto);
+
+      // Verificar que la boleta pertenece a esta venta
+      const boletaTarget = boletas.find(b => b.id === boleta_id);
+      if (!boletaTarget) {
+        throw new Error(`La boleta ${boleta_id} no pertenece a esta venta`);
+      }
+
+      // Calcular saldo de esta boleta
+      const abonosBoleta = await tx.query(
+        `SELECT COALESCE(SUM(monto), 0) as total_pagado FROM abonos WHERE venta_id = $1 AND boleta_id = $2`,
+        [ventaId, boleta_id]
+      );
+      const pagadoBoleta = Number(abonosBoleta.rows[0].total_pagado);
+      const saldoBoleta = precioBoleta - pagadoBoleta;
+
+      if (saldoBoleta <= 0) {
+        throw new Error(`La boleta #${boletaTarget.numero} ya está pagada`);
+      }
+      if (montoNum > saldoBoleta + 0.01) {
+        throw new Error(`El monto excede el saldo de la boleta #${boletaTarget.numero} ($${saldoBoleta.toLocaleString()})`);
+      }
+
+      // Crear abono
+      await tx.query(
+        `INSERT INTO abonos (
+          venta_id, boleta_id, monto, estado, medio_pago_id,
+          gateway_pago, moneda, registrado_por, notas, created_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)`,
+        [ventaId, boleta_id, montoNum, 'CONFIRMADO', medioPagoId,
+         gatewayPagoNombre, moneda || 'COP', userId, notas || null]
+      );
+
+      // Actualizar estado de la boleta
+      const nuevoPagado = pagadoBoleta + montoNum;
+      const estadoBoleta = nuevoPagado >= precioBoleta ? 'PAGADA' : 'ABONADA';
+      await tx.query(
+        `UPDATE boletas SET estado = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
+        [estadoBoleta, boleta_id]
+      );
+    }
+
+    // 5) Recalcular totales de la venta
+    const nuevoTotalResult = await tx.query(
+      `SELECT COALESCE(SUM(monto), 0) as total FROM abonos WHERE venta_id = $1`,
+      [ventaId]
+    );
+    const nuevoTotalPagado = Number(nuevoTotalResult.rows[0].total);
+    const nuevoSaldo = montoTotal - nuevoTotalPagado;
+    const nuevoEstado = nuevoSaldo <= 0 ? 'PAGADA' : 'ABONADA';
+
+    await tx.query(
+      `UPDATE ventas SET abono_total = $1, estado_venta = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3`,
+      [nuevoTotalPagado, nuevoEstado, ventaId]
+    );
+
+    await tx.commit();
+
+    const ventaActualizada = await query(`SELECT * FROM ventas WHERE id = $1`, [ventaId]);
+    return ventaActualizada.rows[0];
+
+  } catch (error) {
+    await tx.rollback();
+    throw error;
+  }
+}
+
+
 ///// BÚSQUEDA DE BOLETA PARA ABONO
 async buscarBoletaParaAbono(numeroBoleta, rifaId = null) {
   // Buscar boleta por número, opcionalmente filtrando por rifa

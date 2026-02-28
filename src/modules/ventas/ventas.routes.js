@@ -209,7 +209,13 @@ const registrarAbonoSchema = Joi.object({
   monto: Joi.number().positive().required(),
   metodo_pago: Joi.string().optional(),
   notas: Joi.string().optional().max(500),
-  boleta_id: Joi.string().uuid().optional()
+  boleta_id: Joi.string().uuid().optional(),
+  boletas_abono: Joi.array().items(
+    Joi.object({
+      boleta_id: Joi.string().uuid().required(),
+      monto: Joi.number().positive().required()
+    })
+  ).optional()
 });
 
 // IMPORTANTE: Esta ruta debe estar ANTES de la ruta genérica `/:id` (importante el orden)
