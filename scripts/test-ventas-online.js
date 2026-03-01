@@ -14,7 +14,7 @@
  */
 
 const API_BASE = 'https://rifas-backend-production.up.railway.app';
-const API_KEY = process.env.PUBLIC_API_KEY || 'pk_rifa_2025_public_access';
+const API_KEY = process.env.PUBLIC_API_KEY || 'pk_4f9a8c7e2d1b6a9f3c0d5e7f8a2b4c6d';
 const ADMIN_EMAIL = 'superadmin@rifas.com';
 const ADMIN_PASS = 'admin123';
 

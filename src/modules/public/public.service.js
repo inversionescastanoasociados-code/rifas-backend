@@ -365,7 +365,7 @@ class PublicService {
         JOIN clientes c ON b.cliente_id = c.id
         LEFT JOIN ventas v ON b.venta_id = v.id
         WHERE c.identificacion = $1
-          AND b.estado NOT IN ('DISPONIBLE', 'ANULADA', 'CANCELADA')
+          AND b.estado NOT IN ('DISPONIBLE', 'ANULADA')
       `;
       const params = [identificacion];
 
