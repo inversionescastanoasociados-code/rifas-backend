@@ -111,6 +111,7 @@ const SQL_QUERIES = {
       b.venta_id,
       b.qr_url,
       b.barcode,
+      b.imagen_url,
       b.reserva_token,
       b.bloqueo_hasta,
       b.created_at,
