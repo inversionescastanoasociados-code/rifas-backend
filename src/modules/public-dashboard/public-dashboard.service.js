@@ -47,8 +47,15 @@ class PublicDashboardService {
       }
 
       const result = await query(sql, params);
-      logger.info(`Obtenidas ${result.rows.length} ventas públicas`);
-      return result.rows;
+      // Asegurar tipos numéricos (PostgreSQL puede devolver numeric como string)
+      const rows = result.rows.map(v => ({
+        ...v,
+        monto_total: Number(v.monto_total || 0),
+        abono_total: Number(v.abono_total || 0),
+        saldo_pendiente: Number(v.saldo_pendiente || 0)
+      }));
+      logger.info(`Obtenidas ${rows.length} ventas públicas`);
+      return rows;
     } catch (error) {
       logger.error('Error obteniendo ventas públicas:', error);
       throw error;
@@ -82,8 +89,15 @@ class PublicDashboardService {
       }
 
       const result = await query(sql, params);
-      logger.info(`Obtenidas ${result.rows.length} ventas públicas pendientes`);
-      return result.rows;
+      // Asegurar tipos numéricos
+      const rows = result.rows.map(v => ({
+        ...v,
+        monto_total: Number(v.monto_total || 0),
+        abono_total: Number(v.abono_total || 0),
+        saldo_pendiente: Number(v.saldo_pendiente || 0)
+      }));
+      logger.info(`Obtenidas ${rows.length} ventas públicas pendientes`);
+      return rows;
     } catch (error) {
       logger.error('Error obteniendo ventas públicas pendientes:', error);
       throw error;
@@ -106,6 +120,12 @@ class PublicDashboardService {
       }
 
       const venta = result.rows[0];
+
+      // Asegurar tipos numéricos (PostgreSQL puede devolver numeric como string)
+      venta.monto_total = Number(venta.monto_total || 0);
+      venta.abono_total = Number(venta.abono_total || 0);
+      venta.saldo_pendiente = Number(venta.saldo_pendiente || 0);
+      venta.precio_boleta = Number(venta.precio_boleta || 0);
 
       // Obtener abonos pendientes
       const abonosResult = await query(
