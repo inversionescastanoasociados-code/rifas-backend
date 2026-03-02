@@ -151,7 +151,13 @@ const SQL_QUERIES = {
         WHEN v.monto_total > 0 AND v.abono_total > 0 AND v.abono_total < v.monto_total THEN 'ABONO'
         WHEN v.estado_venta = 'PENDIENTE' OR v.estado_venta = 'SIN_REVISAR' THEN 'RESERVA'
         ELSE 'SIN_PAGO'
-      END as tipo_transaccion
+      END as tipo_transaccion,
+      (
+        SELECT mp.nombre FROM abonos ab
+        LEFT JOIN medios_pago mp ON ab.medio_pago_id = mp.id
+        WHERE ab.venta_id = v.id AND ab.estado = 'CONFIRMADO'
+        ORDER BY ab.created_at DESC LIMIT 1
+      ) as metodo_pago
     FROM ventas v
     JOIN clientes c ON v.cliente_id = c.id
     JOIN rifas r ON v.rifa_id = r.id
