@@ -112,6 +112,7 @@ const SQL_QUERIES = {
       b.qr_url,
       b.barcode,
       b.imagen_url,
+      b.nota,
       b.reserva_token,
       b.bloqueo_hasta,
       b.created_at,
@@ -184,6 +185,11 @@ const SQL_QUERIES = {
     WHERE a.boleta_id = $1
       AND a.estado != 'ANULADO'
     ORDER BY a.created_at ASC
+  `
+,
+
+  UPDATE_BOLETA_NOTA: `
+    UPDATE boletas SET nota = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING id, numero, nota
   `
 };
 

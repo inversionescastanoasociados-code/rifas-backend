@@ -431,6 +431,27 @@ class BoletaController {
       });
     }
   }
+
+  async updateBoletaNota(req, res) {
+    try {
+      const { id } = req.params;
+      const { nota } = req.body;
+      const result = await boletaService.updateBoletaNota(id, nota ?? null);
+      
+      res.json({
+        success: true,
+        message: 'Nota actualizada exitosamente',
+        data: result
+      });
+    } catch (error) {
+      logger.error('Error in updateBoletaNota controller:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error actualizando nota',
+        error: error.message
+      });
+    }
+  }
 }
 
 module.exports = new BoletaController();

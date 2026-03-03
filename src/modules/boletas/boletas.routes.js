@@ -41,6 +41,10 @@ const updateBoletaImageSchema = Joi.object({
   imagen_url: Joi.string().uri().optional().allow(null)
 });
 
+const updateBoletaNotaSchema = Joi.object({
+  nota: Joi.string().max(500).optional().allow(null, '')
+});
+
 const idSchema = Joi.object({
   id: Joi.string().uuid().required()
 });
@@ -137,6 +141,14 @@ router.put('/:id/image',
   validateParams(idSchema),
   validate(updateBoletaImageSchema), 
   boletaController.updateBoletaImage
+);
+
+router.patch('/:id/nota', 
+  authenticateToken, 
+  authorize(['SUPER_ADMIN', 'admin', 'vendedor']), 
+  validateParams(idSchema),
+  validate(updateBoletaNotaSchema), 
+  boletaController.updateBoletaNota
 );
 
 router.delete('/:id', 

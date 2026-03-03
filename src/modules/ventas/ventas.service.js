@@ -650,7 +650,7 @@ class VentaService {
 
       // Obtener boletas vendidas con datos para impresión
       const boletasVendidas = await query(
-        `SELECT b.id, b.numero, b.estado, b.qr_url, b.imagen_url
+        `SELECT b.id, b.numero, b.estado, b.qr_url, b.imagen_url, b.nota
          FROM boletas b
          WHERE b.venta_id = $1
          ORDER BY b.numero ASC`,
@@ -1240,7 +1240,7 @@ async buscarBoletaParaAbono(numeroBoleta, rifaId = null) {
 
     // Get ALL boletas of this venta with financial details
     const todasBoletasResult = await query(
-      `SELECT b.id, b.numero, b.estado, b.bloqueo_hasta, b.qr_url, b.imagen_url
+      `SELECT b.id, b.numero, b.estado, b.bloqueo_hasta, b.qr_url, b.imagen_url, b.nota
        FROM boletas b WHERE b.venta_id = $1 ORDER BY b.numero ASC`,
       [boleta.venta_id]
     );
@@ -1354,7 +1354,7 @@ const totalPagado = abonos.reduce(
 
   // 3) Boletas de esta venta (incluyendo numero, bloqueo_hasta, qr_url, imagen_url)
   const boletasResult = await query(
-    `SELECT id, numero, estado, bloqueo_hasta, qr_url, imagen_url
+    `SELECT id, numero, estado, bloqueo_hasta, qr_url, imagen_url, nota
      FROM boletas
      WHERE venta_id = $1
      ORDER BY numero ASC`,

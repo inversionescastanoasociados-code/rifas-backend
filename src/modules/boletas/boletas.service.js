@@ -525,6 +525,15 @@ class BoletaService {
       throw error;
     }
   }
+
+  async updateBoletaNota(boletaId, nota) {
+    const { query } = require('../../db/pool');
+    const result = await query(SQL_QUERIES.UPDATE_BOLETA_NOTA, [nota || null, boletaId]);
+    if (result.rows.length === 0) {
+      throw new Error('Boleta no encontrada');
+    }
+    return result.rows[0];
+  }
 }
 
 module.exports = new BoletaService();
