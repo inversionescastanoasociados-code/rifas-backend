@@ -13,8 +13,11 @@ const pool = new Pool({
   connectionTimeoutMillis: 10000,
 });
 
-pool.on('connect', () => {
-  logger.info('Connected to PostgreSQL database');
+pool.on('connect', (client) => {
+  // Configurar zona horaria Colombia para que CURRENT_TIMESTAMP, CURRENT_DATE
+  // y filtros de fecha usen hora colombiana (UTC-5) en vez de UTC
+  client.query("SET timezone = 'America/Bogota'");
+  logger.info('Connected to PostgreSQL database (timezone: America/Bogota)');
 });
 
 pool.on('error', (err) => {
