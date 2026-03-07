@@ -175,7 +175,7 @@ class ClienteService {
             COALESCE(SUM(
               CASE WHEN b.estado IN ('RESERVADA','ABONADA') THEN
                 GREATEST(
-                  (CASE WHEN v.monto_total > 0 AND bc.cnt > 0 THEN v.monto_total::numeric / bc.cnt ELSE r.precio_boleta END)
+                  r.precio_boleta
                   - COALESCE(ab.total_abonado, 0),
                   0
                 )
@@ -301,11 +301,8 @@ class ClienteService {
       const boletasAbonadas = boletas.filter(b => b.estado === 'ABONADA').length;
       const boletasAnuladas = boletas.filter(b => b.estado === 'ANULADA').length;
 
-      // Calculate per-boleta price: monto_total / boletas_en_venta, fallback to rifa.precio_boleta
+      // Always use the rifa's canonical precio_boleta (not monto_total/boletas which can be wrong)
       const getBoletaPrecio = (b) => {
-        if (b.venta_monto_total && b.boletas_en_venta > 0) {
-          return parseFloat(b.venta_monto_total) / parseInt(b.boletas_en_venta);
-        }
         return parseFloat(b.precio_boleta);
       };
 
