@@ -213,6 +213,52 @@ const SQL_QUERIES = {
       AND a.estado = 'CONFIRMADO'
       AND ($2::timestamptz IS NULL OR a.created_at >= $2::timestamptz)
       AND ($3::timestamptz IS NULL OR a.created_at < ($3::timestamptz + interval '1 day'))
+  `,
+
+  /**
+   * Listado detallado de abonos del periodo.
+   * Trae cada abono con info del cliente, venta, boletas y medio de pago.
+   * Params: $1=rifa_id, $2=fecha_inicio, $3=fecha_fin
+   */
+  GET_ABONOS_DETALLE_PERIODO: `
+    SELECT
+      a.id AS abono_id,
+      a.monto,
+      a.estado AS abono_estado,
+      a.notas AS abono_notas,
+      a.referencia,
+      a.created_at AS fecha_abono,
+      COALESCE(mp.nombre, a.gateway_pago, 'Sin registro') AS medio_pago,
+      v.id AS venta_id,
+      v.monto_total,
+      v.abono_total,
+      (v.monto_total - v.abono_total) AS saldo_pendiente,
+      v.estado_venta,
+      v.created_at AS fecha_venta,
+      v.es_venta_online,
+      c.nombre AS cliente_nombre,
+      c.telefono AS cliente_telefono,
+      c.identificacion AS cliente_identificacion,
+      c.email AS cliente_email,
+      COALESCE(u.nombre, 'Online') AS vendedor_nombre,
+      ARRAY_AGG(DISTINCT b.numero ORDER BY b.numero) AS numeros_boletas,
+      COUNT(DISTINCT b.id) AS cantidad_boletas
+    FROM abonos a
+    INNER JOIN ventas v ON v.id = a.venta_id
+    INNER JOIN clientes c ON c.id = v.cliente_id
+    LEFT JOIN medios_pago mp ON mp.id = a.medio_pago_id
+    LEFT JOIN usuarios u ON u.id = v.vendedor_id
+    LEFT JOIN boletas b ON b.venta_id = v.id
+    WHERE v.rifa_id = $1
+      AND a.estado = 'CONFIRMADO'
+      AND ($2::timestamptz IS NULL OR a.created_at >= $2::timestamptz)
+      AND ($3::timestamptz IS NULL OR a.created_at < ($3::timestamptz + interval '1 day'))
+    GROUP BY a.id, a.monto, a.estado, a.notas, a.referencia, a.created_at,
+             mp.nombre, a.gateway_pago,
+             v.id, v.monto_total, v.abono_total, v.estado_venta, v.created_at, v.es_venta_online,
+             c.nombre, c.telefono, c.identificacion, c.email,
+             u.nombre
+    ORDER BY a.created_at DESC
   `
 };
 

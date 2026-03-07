@@ -126,6 +126,9 @@ const getVentasGeneral = async (rifaId, fechaInicio = null, fechaFin = null, pag
   // Recaudo del día: abonos confirmados en el periodo (sin importar fecha de venta)
   const recaudoDiaResult = await query(SQL.GET_RECAUDO_DIA, params3);
 
+  // Detalle de abonos del periodo (para tabla de recaudos)
+  const abonosDetalleResult = await query(SQL.GET_ABONOS_DETALLE_PERIODO, params3);
+
   return {
     ventas: ventasResult.rows.map(v => ({
       ...v,
@@ -135,6 +138,14 @@ const getVentasGeneral = async (rifaId, fechaInicio = null, fechaFin = null, pag
       total_pagado_real: Number(v.total_pagado_real),
       precio_boleta: Number(v.precio_boleta),
       cantidad_boletas: Number(v.cantidad_boletas)
+    })),
+    abonos_periodo: abonosDetalleResult.rows.map(a => ({
+      ...a,
+      monto: Number(a.monto),
+      monto_total: Number(a.monto_total),
+      abono_total: Number(a.abono_total),
+      saldo_pendiente: Number(a.saldo_pendiente),
+      cantidad_boletas: Number(a.cantidad_boletas)
     })),
     resumen: {
       total_ventas: Number(countResult.rows[0].total),
