@@ -196,6 +196,23 @@ const SQL_QUERIES = {
     WHERE v.rifa_id = $1
       AND ($2::timestamptz IS NULL OR v.created_at >= $2::timestamptz)
       AND ($3::timestamptz IS NULL OR v.created_at < ($3::timestamptz + interval '1 day'))
+  `,
+
+  /**
+   * Recaudo del día: suma de TODOS los abonos confirmados cuya fecha de abono
+   * cae dentro del rango seleccionado, SIN IMPORTAR cuándo se creó la venta.
+   * Esto muestra el dinero real que entró en el periodo.
+   */
+  GET_RECAUDO_DIA: `
+    SELECT
+      COALESCE(SUM(a.monto), 0) AS recaudo_dia,
+      COUNT(*) AS cantidad_abonos
+    FROM abonos a
+    INNER JOIN ventas v ON v.id = a.venta_id
+    WHERE v.rifa_id = $1
+      AND a.estado = 'CONFIRMADO'
+      AND ($2::timestamptz IS NULL OR a.created_at >= $2::timestamptz)
+      AND ($3::timestamptz IS NULL OR a.created_at < ($3::timestamptz + interval '1 day'))
   `
 };
 
