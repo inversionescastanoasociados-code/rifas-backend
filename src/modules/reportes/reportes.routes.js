@@ -1,11 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const controller = require('./reportes.controller');
-const { authenticateToken } = require('../../middlewares/auth');
+const { authenticateToken, authorize } = require('../../middlewares/auth');
 
 router.get(
   '/rifa/:rifaId',
   authenticateToken,
+  authorize(['SUPER_ADMIN', 'VENDEDOR']),
   controller.getReporteRifa
 );
 
@@ -13,6 +14,7 @@ router.get(
 router.get(
   '/rifa/:rifaId/ventas',
   authenticateToken,
+  authorize(['SUPER_ADMIN', 'VENDEDOR']),
   controller.getVentasGeneral
 );
 

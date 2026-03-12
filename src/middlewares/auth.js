@@ -34,7 +34,10 @@ const authorize = (roles = []) => {
       });
     }
 
-    if (roles.length && !roles.includes(req.user.rol)) {
+    const normalizedUserRole = String(req.user.rol || '').toUpperCase();
+    const normalizedAllowedRoles = roles.map((role) => String(role).toUpperCase());
+
+    if (roles.length && !normalizedAllowedRoles.includes(normalizedUserRole)) {
       return res.status(403).json({
         error: 'Forbidden',
         message: 'Insufficient permissions'
