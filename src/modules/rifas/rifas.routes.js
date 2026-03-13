@@ -47,6 +47,12 @@ router.get('/',
   rifaController.getAllRifas
 );
 
+router.get('/operativas', 
+  authenticateToken, 
+  authorize(['SUPER_ADMIN', 'ADMIN', 'VENDEDOR']), 
+  rifaController.getAllRifas
+);
+
 router.get('/:id', 
   authenticateToken, 
   authorize(['SUPER_ADMIN']), 
