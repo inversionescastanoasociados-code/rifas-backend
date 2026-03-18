@@ -183,23 +183,17 @@ class PublicService {
       }
 
       // 3️⃣ Buscar o crear cliente
+      // SOLO se reutiliza un cliente existente si la CÉDULA (identificacion) coincide.
+      // El teléfono NO se usa para vincular clientes — personas distintas pueden
+      // compartir número y vincular boletas al dueño equivocado.
       let clienteId;
       let clienteExistente = null;
 
-      // Buscar por teléfono primero
-      const clientePorTelResult = await tx.query(
-        SQL_QUERIES.GET_CLIENTE_BY_TELEFONO,
-        [cliente.telefono]
-      );
-
-      if (clientePorTelResult.rows.length > 0) {
-        clienteId = clientePorTelResult.rows[0].id;
-        clienteExistente = true;
-      } else if (cliente.identificacion) {
-        // Luego por identificación
+      // Buscar SOLO por identificación (cédula) — es el único campo UNIQUE y confiable
+      if (cliente.identificacion && cliente.identificacion.trim()) {
         const clientePorIdResult = await tx.query(
           SQL_QUERIES.GET_CLIENTE_BY_IDENTIFICACION,
-          [cliente.identificacion]
+          [cliente.identificacion.trim()]
         );
 
         if (clientePorIdResult.rows.length > 0) {
@@ -208,7 +202,7 @@ class PublicService {
         }
       }
 
-      // Crear cliente si no existe
+      // Crear cliente si no existe (sin importar si el teléfono coincide con otro)
       if (!clienteId) {
         const newClienteResult = await tx.query(
           SQL_QUERIES.CREATE_CLIENTE,

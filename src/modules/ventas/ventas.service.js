@@ -45,11 +45,14 @@ class VentaService {
       throw new Error('Precio de boleta inválido en la rifa');
     }
 
-    // 🔹 2️⃣ Buscar o crear cliente (identificacion es el único campo único)
+    // 🔹 2️⃣ Buscar o crear cliente
+    // SOLO se reutiliza un cliente existente si la CÉDULA (identificacion) coincide.
+    // El teléfono NO se usa para vincular clientes — personas distintas pueden
+    // compartir número y sobrescribir datos de otro dueño.
     let clienteId;
     let clienteResult = { rows: [] };
 
-    // Primero buscar por identificación (campo único)
+    // Buscar SOLO por identificación (cédula) — es el único campo UNIQUE y confiable
     if (cliente.identificacion && cliente.identificacion.trim()) {
       clienteResult = await tx.query(
         'SELECT id FROM clientes WHERE identificacion = $1 LIMIT 1',
@@ -57,22 +60,11 @@ class VentaService {
       );
     }
 
-    // Fallback: buscar por teléfono
-    if (clienteResult.rows.length === 0) {
-      clienteResult = await tx.query(
-        'SELECT id FROM clientes WHERE telefono = $1 LIMIT 1',
-        [cliente.telefono]
-      );
-    }
-
     if (clienteResult.rows.length > 0) {
+      // Cliente existente encontrado por cédula → reutilizar
       clienteId = clienteResult.rows[0].id;
-      // Actualizar datos del cliente existente
-      await tx.query(
-        `UPDATE clientes SET nombre = $1, telefono = $2, email = $3, direccion = $4, updated_at = CURRENT_TIMESTAMP WHERE id = $5`,
-        [cliente.nombre, cliente.telefono, cliente.email || null, cliente.direccion || null, clienteId]
-      );
     } else {
+      // Cliente nuevo → crearlo (sin importar si el teléfono coincide con otro)
       const newCliente = await tx.query(
         `INSERT INTO clientes 
          (nombre, telefono, email, direccion, identificacion) 
@@ -450,11 +442,14 @@ class VentaService {
 
       const precioBoleta = Number(rifaResult.rows[0].precio_boleta);
 
-      // 🔹 2️⃣ Buscar o crear cliente (identificacion es el único campo único)
+      // 🔹 2️⃣ Buscar o crear cliente
+      // SOLO se reutiliza un cliente existente si la CÉDULA (identificacion) coincide.
+      // El teléfono NO se usa para vincular clientes — personas distintas pueden
+      // compartir número y sobrescribir datos de otro dueño.
       let clienteId;
       let clienteResult = { rows: [] };
 
-      // Primero buscar por identificación (campo único)
+      // Buscar SOLO por identificación (cédula) — es el único campo UNIQUE y confiable
       if (cliente.identificacion && cliente.identificacion.trim()) {
         clienteResult = await tx.query(
           'SELECT id FROM clientes WHERE identificacion = $1 LIMIT 1',
@@ -462,22 +457,11 @@ class VentaService {
         );
       }
 
-      // Fallback: buscar por teléfono
-      if (clienteResult.rows.length === 0) {
-        clienteResult = await tx.query(
-          'SELECT id FROM clientes WHERE telefono = $1 LIMIT 1',
-          [cliente.telefono]
-        );
-      }
-
       if (clienteResult.rows.length > 0) {
+        // Cliente existente encontrado por cédula → reutilizar
         clienteId = clienteResult.rows[0].id;
-        // Actualizar datos del cliente existente
-        await tx.query(
-          `UPDATE clientes SET nombre = $1, telefono = $2, email = $3, direccion = $4, updated_at = CURRENT_TIMESTAMP WHERE id = $5`,
-          [cliente.nombre, cliente.telefono, cliente.email || null, cliente.direccion || null, clienteId]
-        );
       } else {
+        // Cliente nuevo → crearlo (sin importar si el teléfono coincide con otro)
         const newCliente = await tx.query(
           `INSERT INTO clientes 
            (nombre, telefono, email, direccion, identificacion) 
