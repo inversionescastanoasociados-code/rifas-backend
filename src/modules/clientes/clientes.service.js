@@ -393,7 +393,7 @@ class ClienteService {
         nextNum = parseInt(result.rows[0].max_num, 10) + 1;
       }
 
-      const nextIdentificacion = String(nextNum).padStart(6, '0');
+      const nextIdentificacion = String(nextNum).padStart(5, '0');
       return nextIdentificacion;
     } catch (error) {
       logger.error('Error in getNextIdentificacion service:', error);
