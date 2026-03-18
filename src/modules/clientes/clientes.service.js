@@ -383,9 +383,9 @@ class ClienteService {
   async getNextIdentificacion() {
     try {
       const result = await query(`
-        SELECT MAX(identificacion::bigint) AS max_num
+        SELECT MAX(identificacion::int) AS max_num
         FROM clientes
-        WHERE identificacion ~ '^[0-9]+$'
+        WHERE identificacion ~ '^[0-9]{5}$'
       `);
 
       let nextNum = 1;
