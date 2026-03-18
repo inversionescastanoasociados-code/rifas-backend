@@ -233,48 +233,31 @@ class VentasOnlineService {
       // ══════════════════════════════════
       //  PASO 2: Buscar o crear cliente
       // ══════════════════════════════════
-      // 1. Buscar por cédula (identificacion) - es el único campo UNIQUE
-      // 2. Si no encuentra, buscar por teléfono como fallback
-      // 3. Si encuentra → usar ese cliente existente y actualizar datos
-      // 4. Si no encuentra → crear uno nuevo
+      // SOLO se reutiliza un cliente existente si la CÉDULA (identificacion) coincide.
+      // El teléfono NO se usa para vincular clientes — personas distintas pueden
+      // compartir número (familia, pareja, etc.) y sobrescribir datos de otro dueño.
       if (!cliente || !cliente.nombre || !cliente.telefono) {
         throw new Error('Nombre y teléfono del cliente son obligatorios');
       }
 
       let clienteId;
       let clienteNuevo = true;
+      let advertenciaCedulaExistente = null;
 
-      // Buscar por identificación primero (es UNIQUE)
+      // Buscar SOLO por identificación (cédula) — es el único campo UNIQUE y confiable
       let clienteResult = { rows: [] };
       if (cliente.identificacion && cliente.identificacion.trim()) {
         clienteResult = await tx.query(SQL.GET_CLIENTE_BY_IDENTIFICACION, [cliente.identificacion.trim()]);
       }
 
-      // Si no encuentra por identificación, buscar por teléfono como fallback
-      if (clienteResult.rows.length === 0) {
-        clienteResult = await tx.query(SQL.GET_CLIENTE_BY_TELEFONO, [cliente.telefono.trim()]);
-      }
-
       if (clienteResult.rows.length > 0) {
-        // Cliente existente encontrado → usarlo y actualizar datos
+        // Cliente existente encontrado por cédula → reutilizar su registro
         clienteId = clienteResult.rows[0].id;
         clienteNuevo = false;
-        
-        // Actualizar datos del cliente existente
-        await tx.query(
-          `UPDATE clientes SET nombre = $1, telefono = $2, email = $3, identificacion = $4, direccion = $5 WHERE id = $6`,
-          [
-            cliente.nombre.trim(),
-            cliente.telefono.trim(),
-            cliente.email ? cliente.email.trim().toLowerCase() : clienteResult.rows[0].email,
-            cliente.identificacion ? cliente.identificacion.trim() : clienteResult.rows[0].identificacion,
-            cliente.direccion ? cliente.direccion.trim() : clienteResult.rows[0].direccion,
-            clienteId
-          ]
-        );
-        logger.info(`[VentasOnline] Cliente existente encontrado y actualizado: ${clienteId} - ${clienteResult.rows[0].nombre}`);
+        advertenciaCedulaExistente = `La cédula ${cliente.identificacion.trim()} ya está registrada a nombre de "${clienteResult.rows[0].nombre}".`;
+        logger.warn(`[VentasOnline] ${advertenciaCedulaExistente} Se reutiliza el cliente existente (ID: ${clienteId}).`);
       } else {
-        // Cliente nuevo → crearlo
+        // Cliente nuevo → crearlo (sin importar si el teléfono coincide con otro)
         const newCliente = await tx.query(SQL.CREATE_CLIENTE, [
           cliente.nombre.trim(),
           cliente.telefono.trim(),
