@@ -189,6 +189,23 @@ class ClienteController {
     }
   }
 
+  async getNextIdentificacion(req, res) {
+    try {
+      const nextIdentificacion = await clienteService.getNextIdentificacion();
+      res.status(200).json({
+        success: true,
+        data: { identificacion: nextIdentificacion }
+      });
+    } catch (error) {
+      logger.error('Error in getNextIdentificacion controller:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error generating next identificacion',
+        error: error.message
+      });
+    }
+  }
+
   async deleteCliente(req, res) {
     try {
       const { id } = req.params;

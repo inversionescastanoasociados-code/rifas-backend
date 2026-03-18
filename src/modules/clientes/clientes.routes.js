@@ -55,6 +55,13 @@ router.get('/',
   clienteController.getAllClientes
 );
 
+// GET /api/clientes/next-identificacion - Generar siguiente identificación secuencial
+router.get('/next-identificacion', 
+  authenticateToken, 
+  authorize(['SUPER_ADMIN', 'ADMIN', 'VENDEDOR']), 
+  clienteController.getNextIdentificacion
+);
+
 // GET /api/clientes/identificacion/:identificacion - Buscar cliente por cédula/identificación
 router.get('/identificacion/:identificacion', 
   authenticateToken, 

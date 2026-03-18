@@ -380,6 +380,27 @@ class ClienteService {
     }
   }
 
+  async getNextIdentificacion() {
+    try {
+      const result = await query(`
+        SELECT MAX(identificacion::bigint) AS max_num
+        FROM clientes
+        WHERE identificacion ~ '^[0-9]+$'
+      `);
+
+      let nextNum = 1;
+      if (result.rows.length > 0 && result.rows[0].max_num !== null) {
+        nextNum = parseInt(result.rows[0].max_num, 10) + 1;
+      }
+
+      const nextIdentificacion = String(nextNum).padStart(6, '0');
+      return nextIdentificacion;
+    } catch (error) {
+      logger.error('Error in getNextIdentificacion service:', error);
+      throw error;
+    }
+  }
+
   async deleteCliente(id) {
     try {
       // Verificar si el cliente tiene ventas o boletas asociadas
