@@ -975,7 +975,7 @@ Cuando un comprador crea una reserva en elgrancamion.com, el backend gestiona au
 
 **Beneficios para el admin:**
 - Si un cliente ya compró antes, todas sus ventas quedan vinculadas al mismo registro
-- El admin puede ver el historial de compras de un cliente desde el dashboard
+- El admin puede ver el historial de compras de un cliente desde el dashboar
 - No se crean duplicados innecesarios
 
 **Para el frontend:** No cambia nada. El formulario siempre pide los mismos datos (nombre, teléfono, etc.) y el backend se encarga de la lógica internamente.
