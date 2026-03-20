@@ -20,6 +20,7 @@ const publicRoutes = require('./modules/public/public.routes');
 const publicDashboardRoutes = require('./modules/public-dashboard/public-dashboard.routes');
 const verificarRoutes = require('./modules/verificar/verificar.routes');
 const ventasOnlineRoutes = require('./modules/ventas-online/ventas-online.routes');
+const recordatoriosRoutes = require('./modules/recordatorios/recordatorios.routes');
 
 const app = express();
 
@@ -79,6 +80,7 @@ app.use('/api/public', publicRoutes);
 app.use('/api/admin/dashboard', publicDashboardRoutes);
 app.use('/api/ventas-online', ventasOnlineRoutes);
 app.use('/api/verificar', verificarRoutes);
+app.use('/api/recordatorios', recordatoriosRoutes);
 
 // Servir imágenes: primero intenta filesystem, luego fallback a DB
 const { servirImagen } = require('./modules/uploads/uploads.controller');

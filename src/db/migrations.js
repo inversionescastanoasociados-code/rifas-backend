@@ -39,6 +39,23 @@ async function runMigrations() {
   } catch (error) {
     logger.warn('[Migrations] Error en migración 3:', error.message);
   }
+
+  // ── Migración 4: Crear tabla notificaciones_recordatorio ──
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS notificaciones_recordatorio (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        cliente_id UUID NOT NULL REFERENCES clientes(id) ON DELETE CASCADE,
+        notificado_por UUID REFERENCES usuarios(id),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_notif_recordatorio_cliente 
+        ON notificaciones_recordatorio(cliente_id);
+    `);
+    logger.info('[Migrations] Tabla notificaciones_recordatorio creada/verificada');
+  } catch (error) {
+    logger.warn('[Migrations] Error en migración 4:', error.message);
+  }
 }
 
 module.exports = { runMigrations };
