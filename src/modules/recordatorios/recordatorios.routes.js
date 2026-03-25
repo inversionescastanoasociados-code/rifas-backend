@@ -10,7 +10,12 @@ const querySchema = Joi.object({
   limit: Joi.number().integer().min(1).max(100).default(20),
   search: Joi.string().optional().max(100).trim(),
   filtro: Joi.string().valid('todos', 'reservadas', 'abonadas').default('todos'),
-  notificado: Joi.string().valid('todos', 'si', 'no').default('todos')
+  notificado: Joi.string().valid('todos', 'si', 'no').default('todos'),
+  vendedor: Joi.string().uuid().optional()
+});
+
+const resumenQuerySchema = Joi.object({
+  vendedor: Joi.string().uuid().optional()
 });
 
 const clienteIdSchema = Joi.object({
@@ -25,10 +30,18 @@ router.get('/',
   recordatorioController.getClientesParaRecordatorio
 );
 
+// GET /api/recordatorios/vendedores - Listar vendedores/admins para filtro
+router.get('/vendedores',
+  authenticateToken,
+  authorize(['SUPER_ADMIN', 'ADMIN', 'VENDEDOR']),
+  recordatorioController.getVendedores
+);
+
 // GET /api/recordatorios/resumen - Obtener conteos para filtros
 router.get('/resumen',
   authenticateToken,
   authorize(['SUPER_ADMIN', 'ADMIN', 'VENDEDOR']),
+  validate(resumenQuerySchema, 'query'),
   recordatorioController.getResumenRecordatorios
 );
 

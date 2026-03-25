@@ -31,7 +31,7 @@ class RecordatorioService {
    * Ordered by oldest created_at first (oldest clients first).
    * Includes notification tracking info.
    */
-  async getClientesParaRecordatorio({ page = 1, limit = 20, search, filtro = 'todos', notificado = 'todos' }) {
+  async getClientesParaRecordatorio({ page = 1, limit = 20, search, filtro = 'todos', notificado = 'todos', vendedor }) {
     try {
       const params = [];
       let paramCount = 0;
@@ -60,6 +60,14 @@ class RecordatorioService {
         params.push(`%${search}%`);
       }
 
+      // Vendedor filter
+      let vendedorCondition = '';
+      if (vendedor) {
+        paramCount++;
+        vendedorCondition = `AND b.vendido_por = $${paramCount}`;
+        params.push(vendedor);
+      }
+
       // Build the main query with a CTE for boleta stats and notification info
       const mainQuery = `
         WITH boleta_stats AS (
@@ -83,7 +91,19 @@ class RecordatorioService {
             SELECT COALESCE(SUM(a.monto) FILTER (WHERE a.estado = 'CONFIRMADO'), 0) AS total_abonado
             FROM abonos a WHERE a.boleta_id = b.id
           ) ab ON true
+          WHERE 1=1 ${vendedorCondition}
           GROUP BY b.cliente_id
+        ),
+        vendedor_info AS (
+          SELECT DISTINCT ON (b.cliente_id)
+            b.cliente_id,
+            u.id AS vendedor_id,
+            u.nombre AS vendedor_nombre
+          FROM boletas b
+          JOIN usuarios u ON b.vendido_por = u.id
+          WHERE b.estado IN ('RESERVADA', 'ABONADA')
+          ${vendedorCondition}
+          ORDER BY b.cliente_id, b.created_at DESC
         ),
         notif_info AS (
           SELECT 
@@ -101,9 +121,12 @@ class RecordatorioService {
           COALESCE(bs.abonadas, 0)::int AS boletas_abonadas,
           COALESCE(bs.deuda_total, 0)::numeric AS deuda_total,
           COALESCE(ni.total_notificaciones, 0)::int AS total_notificaciones,
-          ni.ultima_notificacion
+          ni.ultima_notificacion,
+          vi.vendedor_id,
+          vi.vendedor_nombre
         FROM clientes c
         INNER JOIN boleta_stats bs ON bs.cliente_id = c.id
+        LEFT JOIN vendedor_info vi ON vi.cliente_id = c.id
         LEFT JOIN notif_info ni ON ni.cliente_id = c.id
         WHERE ${conditions.join(' AND ')}
         ${searchCondition}
@@ -190,8 +213,15 @@ class RecordatorioService {
   /**
    * Get summary counts for filter cards
    */
-  async getResumenRecordatorios() {
+  async getResumenRecordatorios(vendedor) {
     try {
+      const params = [];
+      let vendedorCondition = '';
+      if (vendedor) {
+        params.push(vendedor);
+        vendedorCondition = `AND b.vendido_por = $1`;
+      }
+
       const result = await query(`
         WITH boleta_stats AS (
           SELECT 
@@ -199,6 +229,7 @@ class RecordatorioService {
             COUNT(*) FILTER (WHERE b.estado = 'RESERVADA') AS reservadas,
             COUNT(*) FILTER (WHERE b.estado = 'ABONADA') AS abonadas
           FROM boletas b
+          WHERE 1=1 ${vendedorCondition}
           GROUP BY b.cliente_id
         ),
         notif_info AS (
@@ -213,11 +244,31 @@ class RecordatorioService {
           COUNT(*) FILTER (WHERE (bs.reservadas > 0 OR bs.abonadas > 0) AND ni.cliente_id IS NULL) AS no_notificados
         FROM boleta_stats bs
         LEFT JOIN notif_info ni ON ni.cliente_id = bs.cliente_id
-      `);
+      `, params);
 
       return result.rows[0];
     } catch (error) {
       logger.error('Error in getResumenRecordatorios:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get list of vendedores/admins who have sold boletas
+   */
+  async getVendedores() {
+    try {
+      const result = await query(`
+        SELECT DISTINCT u.id, u.nombre, u.rol
+        FROM usuarios u
+        INNER JOIN boletas b ON b.vendido_por = u.id
+        WHERE b.estado IN ('RESERVADA', 'ABONADA')
+          AND u.activo = true
+        ORDER BY u.nombre ASC
+      `);
+      return result.rows;
+    } catch (error) {
+      logger.error('Error in getVendedores:', error);
       throw error;
     }
   }
