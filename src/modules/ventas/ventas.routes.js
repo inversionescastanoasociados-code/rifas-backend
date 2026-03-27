@@ -137,6 +137,34 @@ router.get(
   ventaController.buscarBoletaParaAbono
 );
 
+// 🔹 GANADORES — Solo SUPER_ADMIN
+router.get(
+  '/ganadores/buscar-boleta',
+  authenticateToken,
+  authorize(['SUPER_ADMIN']),
+  ventaController.buscarBoletaGanador
+);
+
+router.post(
+  '/ganadores/asignar',
+  authenticateToken,
+  authorize(['SUPER_ADMIN']),
+  validate(Joi.object({
+    rifa_id: Joi.string().uuid().required(),
+    boleta_id: Joi.string().uuid().required(),
+    cliente: Joi.object({
+      nombre: Joi.string().required().max(200),
+      telefono: Joi.string().required().max(20),
+      email: Joi.string().email().optional().allow('', null),
+      direccion: Joi.string().optional().allow('', null),
+      identificacion: Joi.string().optional().allow('', null)
+    }).required(),
+    monto_abono: Joi.number().positive().required(),
+    medio_pago_id: Joi.string().uuid().required()
+  })),
+  ventaController.asignarGanador
+);
+
 router.get('/', 
   authenticateToken, 
   authorize(['SUPER_ADMIN', 'admin']), 

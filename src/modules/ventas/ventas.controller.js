@@ -593,6 +593,33 @@ async registrarAbono(req, res) {
   }
 }
 
+// ─── GANADORES ─────────────────────────────────────────────
+async buscarBoletaGanador(req, res) {
+  try {
+    const { numero } = req.query;
+    if (!numero) {
+      return res.status(400).json({ success: false, message: 'El número de boleta es requerido' });
+    }
+    const resultado = await ventaService.buscarBoletaGanador(Number(numero));
+    res.json({ success: true, data: resultado });
+  } catch (error) {
+    logger.error('Error in buscarBoletaGanador:', error);
+    res.status(500).json({ success: false, message: 'Error buscando boleta', error: error.message });
+  }
+}
+
+async asignarGanador(req, res) {
+  try {
+    const data = { ...req.body, asignado_por: req.user.id };
+    const resultado = await ventaService.asignarGanador(data);
+    res.status(201).json({ success: true, message: 'Ganador asignado exitosamente', data: resultado });
+  } catch (error) {
+    logger.error('Error in asignarGanador:', error);
+    const status = error.message.includes('no encontrada') || error.message.includes('no está disponible') ? 400 : 500;
+    res.status(status).json({ success: false, message: error.message });
+  }
+}
+
 }
 
 

@@ -1471,6 +1471,144 @@ async getVentasPorCliente(clienteId) {
 
   return ventasConSaldo;
 }
+
+  // ─── GANADORES ─────────────────────────────────────────────
+  async buscarBoletaGanador(numeroBoleta) {
+    const boletaResult = await query(`
+      SELECT b.id, b.numero, b.estado, b.venta_id, b.cliente_id, b.rifa_id,
+             r.nombre AS rifa_nombre, r.precio_boleta
+      FROM boletas b
+      JOIN rifas r ON b.rifa_id = r.id
+      WHERE b.numero = $1
+      ORDER BY b.created_at DESC LIMIT 1
+    `, [numeroBoleta]);
+
+    if (boletaResult.rows.length === 0) {
+      return { encontrada: false, mensaje: 'Boleta no encontrada' };
+    }
+
+    const boleta = boletaResult.rows[0];
+
+    if (boleta.estado === 'DISPONIBLE') {
+      return {
+        encontrada: true,
+        disponible: true,
+        boleta: {
+          id: boleta.id,
+          numero: boleta.numero,
+          estado: boleta.estado,
+          rifa_id: boleta.rifa_id,
+          rifa_nombre: boleta.rifa_nombre,
+          precio_boleta: Number(boleta.precio_boleta)
+        }
+      };
+    }
+
+    // Boleta ya asignada — devolver solo nombre del cliente
+    let clienteNombre = null;
+    if (boleta.cliente_id) {
+      const clienteResult = await query(
+        'SELECT nombre FROM clientes WHERE id = $1', [boleta.cliente_id]
+      );
+      if (clienteResult.rows.length > 0) {
+        clienteNombre = clienteResult.rows[0].nombre;
+      }
+    }
+
+    return {
+      encontrada: true,
+      disponible: false,
+      boleta: {
+        id: boleta.id,
+        numero: boleta.numero,
+        estado: boleta.estado,
+        rifa_id: boleta.rifa_id,
+        rifa_nombre: boleta.rifa_nombre,
+        cliente_nombre: clienteNombre
+      }
+    };
+  }
+
+  async asignarGanador({ rifa_id, boleta_id, cliente, monto_abono, medio_pago_id, asignado_por }) {
+    const tx = await beginTransaction();
+    try {
+      // Verificar que la boleta existe y está DISPONIBLE
+      const boletaCheck = await tx.query(
+        'SELECT id, estado, numero FROM boletas WHERE id = $1 AND rifa_id = $2 FOR UPDATE',
+        [boleta_id, rifa_id]
+      );
+      if (boletaCheck.rows.length === 0) throw new Error('Boleta no encontrada');
+      if (boletaCheck.rows[0].estado !== 'DISPONIBLE') throw new Error('La boleta ya no está disponible');
+
+      const precioBoleta = await tx.query('SELECT precio_boleta FROM rifas WHERE id = $1', [rifa_id]);
+      if (precioBoleta.rows.length === 0) throw new Error('Rifa no encontrada');
+      const precio = Number(precioBoleta.rows[0].precio_boleta);
+
+      // Buscar o crear cliente
+      let clienteId;
+      if (cliente.identificacion && cliente.identificacion.trim()) {
+        const existing = await tx.query(
+          'SELECT id FROM clientes WHERE identificacion = $1 LIMIT 1',
+          [cliente.identificacion.trim()]
+        );
+        if (existing.rows.length > 0) {
+          clienteId = existing.rows[0].id;
+        }
+      }
+      if (!clienteId) {
+        const newCliente = await tx.query(
+          `INSERT INTO clientes (nombre, telefono, email, direccion, identificacion)
+           VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+          [cliente.nombre, cliente.telefono, cliente.email || null, cliente.direccion || null, cliente.identificacion || null]
+        );
+        clienteId = newCliente.rows[0].id;
+      }
+
+      const esPagoCompleto = monto_abono >= precio;
+      const estadoVenta = esPagoCompleto ? 'PAGADA' : 'ABONADA';
+      const estadoBoleta = esPagoCompleto ? 'PAGADA' : 'ABONADA';
+
+      // Obtener nombre medio pago
+      const mpResult = await tx.query('SELECT nombre FROM medios_pago WHERE id = $1', [medio_pago_id]);
+      const gatewayNombre = mpResult.rows.length > 0 ? mpResult.rows[0].nombre : null;
+
+      // Crear venta
+      const ventaResult = await tx.query(
+        `INSERT INTO ventas (rifa_id, cliente_id, monto_total, abono_total, estado_venta, medio_pago_id, vendedor_id, gateway_pago, created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,CURRENT_TIMESTAMP) RETURNING *`,
+        [rifa_id, clienteId, precio, monto_abono, estadoVenta, medio_pago_id, asignado_por, gatewayNombre]
+      );
+      const venta = ventaResult.rows[0];
+
+      // Asignar boleta
+      await tx.query(
+        `UPDATE boletas SET estado=$1, cliente_id=$2, vendido_por=$3, venta_id=$4, reserva_token=NULL, bloqueo_hasta=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=$5`,
+        [estadoBoleta, clienteId, asignado_por, venta.id, boleta_id]
+      );
+
+      // Crear abono
+      await tx.query(
+        `INSERT INTO abonos (venta_id, registrado_por, boleta_id, medio_pago_id, gateway_pago, monto, moneda, estado, notas, created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,'COP','CONFIRMADO',$7,CURRENT_TIMESTAMP)`,
+        [venta.id, asignado_por, boleta_id, medio_pago_id, gatewayNombre, monto_abono, esPagoCompleto ? 'Pago completo - Ganador' : 'Abono - Ganador']
+      );
+
+      await tx.commit();
+
+      return {
+        venta_id: venta.id,
+        boleta_numero: boletaCheck.rows[0].numero,
+        cliente_nombre: cliente.nombre,
+        monto_abono,
+        estado_venta: estadoVenta,
+        estado_boleta: estadoBoleta
+      };
+    } catch (error) {
+      await tx.rollback();
+      logger.error('Error asignando ganador:', error);
+      throw error;
+    }
+  }
 }
 
 module.exports = new VentaService();
