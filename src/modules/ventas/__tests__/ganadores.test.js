@@ -149,7 +149,9 @@ describe('GET /api/ventas/ganadores/buscar-boleta', () => {
           cliente_id: 'cliente-uuid-1',
           rifa_id: 'rifa-uuid-1',
           rifa_nombre: 'Rifa Test',
-          precio_boleta: '50000'
+          precio_boleta: '50000',
+          rifa_imagen_url: '/images/rifa.jpg',
+          nota: 'Nota test'
         }]
       })
       .mockResolvedValueOnce({
@@ -168,6 +170,9 @@ describe('GET /api/ventas/ganadores/buscar-boleta', () => {
     expect(res.body.data.disponible).toBe(false);
     expect(res.body.data.boleta.cliente_nombre).toBe('Juan Perez');
     expect(res.body.data.boleta.estado).toBe('PAGADA');
+    expect(res.body.data.boleta.precio_boleta).toBe(50000);
+    expect(res.body.data.boleta.rifa_imagen_url).toBe('/images/rifa.jpg');
+    expect(res.body.data.boleta.nota).toBe('Nota test');
     // Venta financial info
     expect(res.body.data.boleta.venta).toBeDefined();
     expect(res.body.data.boleta.venta.monto_total).toBe(50000);
@@ -179,7 +184,6 @@ describe('GET /api/ventas/ganadores/buscar-boleta', () => {
     expect(res.body.data.boleta).not.toHaveProperty('identificacion');
     expect(res.body.data.boleta).not.toHaveProperty('qr');
     expect(res.body.data.boleta).not.toHaveProperty('qr_code');
-    expect(res.body.data.boleta).not.toHaveProperty('precio_boleta');
   });
 });
 

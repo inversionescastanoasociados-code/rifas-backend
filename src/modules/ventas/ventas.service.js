@@ -1476,6 +1476,7 @@ async getVentasPorCliente(clienteId) {
   async buscarBoletaGanador(numeroBoleta) {
     const boletaResult = await query(`
       SELECT b.id, b.numero, b.estado, b.venta_id, b.cliente_id, b.rifa_id,
+             b.nota, b.bloqueo_hasta, b.imagen_url AS rifa_imagen_url,
              r.nombre AS rifa_nombre, r.precio_boleta
       FROM boletas b
       JOIN rifas r ON b.rifa_id = r.id
@@ -1499,7 +1500,8 @@ async getVentasPorCliente(clienteId) {
           estado: boleta.estado,
           rifa_id: boleta.rifa_id,
           rifa_nombre: boleta.rifa_nombre,
-          precio_boleta: Number(boleta.precio_boleta)
+          precio_boleta: Number(boleta.precio_boleta),
+          rifa_imagen_url: boleta.rifa_imagen_url || null
         }
       };
     }
@@ -1542,6 +1544,9 @@ async getVentasPorCliente(clienteId) {
         estado: boleta.estado,
         rifa_id: boleta.rifa_id,
         rifa_nombre: boleta.rifa_nombre,
+        rifa_imagen_url: boleta.rifa_imagen_url || null,
+        precio_boleta: Number(boleta.precio_boleta),
+        nota: boleta.nota || null,
         cliente_nombre: clienteNombre,
         venta: ventaInfo
       }
