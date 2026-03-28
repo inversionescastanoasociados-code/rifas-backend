@@ -154,6 +154,9 @@ describe('GET /api/ventas/ganadores/buscar-boleta', () => {
       })
       .mockResolvedValueOnce({
         rows: [{ nombre: 'Juan Perez' }]
+      })
+      .mockResolvedValueOnce({
+        rows: [{ monto_total: '50000', abono_total: '50000', saldo_pendiente: '0', estado_venta: 'PAGADA' }]
       });
 
     const res = await request(app)
@@ -164,6 +167,12 @@ describe('GET /api/ventas/ganadores/buscar-boleta', () => {
     expect(res.body.data.encontrada).toBe(true);
     expect(res.body.data.disponible).toBe(false);
     expect(res.body.data.boleta.cliente_nombre).toBe('Juan Perez');
+    expect(res.body.data.boleta.estado).toBe('PAGADA');
+    // Venta financial info
+    expect(res.body.data.boleta.venta).toBeDefined();
+    expect(res.body.data.boleta.venta.monto_total).toBe(50000);
+    expect(res.body.data.boleta.venta.abono_total).toBe(50000);
+    expect(res.body.data.boleta.venta.saldo_pendiente).toBe(0);
     // Must NOT expose sensitive data
     expect(res.body.data.boleta).not.toHaveProperty('telefono');
     expect(res.body.data.boleta).not.toHaveProperty('cedula');

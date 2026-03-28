@@ -1504,7 +1504,7 @@ async getVentasPorCliente(clienteId) {
       };
     }
 
-    // Boleta ya asignada — devolver solo nombre del cliente
+    // Boleta ya asignada — devolver nombre del cliente + info financiera
     let clienteNombre = null;
     if (boleta.cliente_id) {
       const clienteResult = await query(
@@ -1512,6 +1512,24 @@ async getVentasPorCliente(clienteId) {
       );
       if (clienteResult.rows.length > 0) {
         clienteNombre = clienteResult.rows[0].nombre;
+      }
+    }
+
+    // Obtener info financiera de la venta
+    let ventaInfo = null;
+    if (boleta.venta_id) {
+      const ventaResult = await query(
+        'SELECT monto_total, abono_total, saldo_pendiente, estado_venta FROM ventas WHERE id = $1',
+        [boleta.venta_id]
+      );
+      if (ventaResult.rows.length > 0) {
+        const v = ventaResult.rows[0];
+        ventaInfo = {
+          monto_total: Number(v.monto_total),
+          abono_total: Number(v.abono_total),
+          saldo_pendiente: Number(v.saldo_pendiente),
+          estado_venta: v.estado_venta
+        };
       }
     }
 
@@ -1524,7 +1542,8 @@ async getVentasPorCliente(clienteId) {
         estado: boleta.estado,
         rifa_id: boleta.rifa_id,
         rifa_nombre: boleta.rifa_nombre,
-        cliente_nombre: clienteNombre
+        cliente_nombre: clienteNombre,
+        venta: ventaInfo
       }
     };
   }
