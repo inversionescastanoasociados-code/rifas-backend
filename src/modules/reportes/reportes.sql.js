@@ -1,16 +1,19 @@
 /**
  * SQL Queries para reportes - TODAS filtradas por rango de fechas opcional
- * 
- * Parámetros:
+ *
+ * Parámetros estándar:
  *   $1 = rifa_id
  *   $2 = fecha_inicio (null si no hay filtro)
  *   $3 = fecha_fin (null si no hay filtro)
+ *   $4 = vendedor_id (null = sin filtrar por vendedor; si viene, restringe a las ventas de ese usuario)
+ *
+ * Para queries paginadas se agrega $5 = limit, $6 = offset.
  */
 
 const SQL_QUERIES = {
 
   GET_RIFA_RESUMEN: `
-    SELECT 
+    SELECT
       r.id,
       r.nombre,
       r.total_boletas,
@@ -20,17 +23,21 @@ const SQL_QUERIES = {
     WHERE r.id = $1
   `,
 
-  /* Estado ACTUAL de boletas (sin filtro de fecha) */
+  /* Estado ACTUAL de boletas. Si $2 (vendedor_id) viene, solo cuenta boletas de ventas de ese vendedor. */
   GET_BOLETAS_RESUMEN: `
     SELECT
       COUNT(*) AS total_boletas,
-      COUNT(CASE WHEN estado = 'DISPONIBLE' THEN 1 END) AS disponibles,
-      COUNT(CASE WHEN estado = 'RESERVADA' THEN 1 END) AS reservadas,
-      COUNT(CASE WHEN estado = 'ABONADA' THEN 1 END) AS abonadas,
-      COUNT(CASE WHEN estado = 'PAGADA' THEN 1 END) AS pagadas,
-      COUNT(CASE WHEN estado = 'ANULADA' THEN 1 END) AS anuladas
-    FROM boletas
-    WHERE rifa_id = $1
+      COUNT(CASE WHEN b.estado = 'DISPONIBLE' THEN 1 END) AS disponibles,
+      COUNT(CASE WHEN b.estado = 'RESERVADA' THEN 1 END) AS reservadas,
+      COUNT(CASE WHEN b.estado = 'ABONADA' THEN 1 END) AS abonadas,
+      COUNT(CASE WHEN b.estado = 'PAGADA' THEN 1 END) AS pagadas,
+      COUNT(CASE WHEN b.estado = 'ANULADA' THEN 1 END) AS anuladas
+    FROM boletas b
+    WHERE b.rifa_id = $1
+      AND (
+        $2::uuid IS NULL
+        OR b.venta_id IN (SELECT id FROM ventas WHERE vendedor_id = $2::uuid)
+      )
   `,
 
   /* Boletas vendidas dentro del periodo basado en ventas.created_at */
@@ -47,10 +54,11 @@ const SQL_QUERIES = {
       AND b.estado != 'DISPONIBLE'
       AND ($2::timestamptz IS NULL OR v.created_at >= $2::timestamptz)
       AND ($3::timestamptz IS NULL OR v.created_at < ($3::timestamptz + interval '1 day'))
+      AND ($4::uuid IS NULL OR v.vendedor_id = $4::uuid)
   `,
 
   GET_RECAUDO_REAL: `
-    SELECT 
+    SELECT
       COALESCE(SUM(a.monto), 0) AS recaudo_real
     FROM abonos a
     INNER JOIN ventas v ON v.id = a.venta_id
@@ -58,20 +66,22 @@ const SQL_QUERIES = {
       AND a.estado = 'CONFIRMADO'
       AND ($2::timestamptz IS NULL OR a.created_at >= $2::timestamptz)
       AND ($3::timestamptz IS NULL OR a.created_at < ($3::timestamptz + interval '1 day'))
+      AND ($4::uuid IS NULL OR v.vendedor_id = $4::uuid)
   `,
 
-  /* Recaudo total histórico (sin filtro de fecha) */
+  /* Recaudo total histórico (sin filtro de fecha; mantiene filtro opcional de vendedor en $2) */
   GET_RECAUDO_TOTAL: `
-    SELECT 
+    SELECT
       COALESCE(SUM(a.monto), 0) AS recaudo_total
     FROM abonos a
     INNER JOIN ventas v ON v.id = a.venta_id
     WHERE v.rifa_id = $1
       AND a.estado = 'CONFIRMADO'
+      AND ($2::uuid IS NULL OR v.vendedor_id = $2::uuid)
   `,
 
   GET_SERIE_DIARIA: `
-    SELECT 
+    SELECT
       DATE(a.created_at) AS fecha,
       SUM(a.monto) AS total
     FROM abonos a
@@ -80,27 +90,30 @@ const SQL_QUERIES = {
       AND a.estado = 'CONFIRMADO'
       AND ($2::timestamptz IS NULL OR a.created_at >= $2::timestamptz)
       AND ($3::timestamptz IS NULL OR a.created_at < ($3::timestamptz + interval '1 day'))
+      AND ($4::uuid IS NULL OR v.vendedor_id = $4::uuid)
     GROUP BY DATE(a.created_at)
     ORDER BY fecha ASC
   `,
 
   GET_METODOS_PAGO: `
-    SELECT 
-      COALESCE(a.gateway_pago, 'SIN_GATEWAY') AS metodo,
+    SELECT
+      COALESCE(NULLIF(BTRIM(mp.nombre), ''), NULLIF(BTRIM(a.gateway_pago), ''), 'SIN_GATEWAY') AS metodo,
       COUNT(*) AS cantidad,
       SUM(a.monto) AS total
     FROM abonos a
     INNER JOIN ventas v ON v.id = a.venta_id
+    LEFT JOIN medios_pago mp ON mp.id = a.medio_pago_id
     WHERE v.rifa_id = $1
       AND a.estado = 'CONFIRMADO'
       AND ($2::timestamptz IS NULL OR a.created_at >= $2::timestamptz)
       AND ($3::timestamptz IS NULL OR a.created_at < ($3::timestamptz + interval '1 day'))
-    GROUP BY a.gateway_pago
+      AND ($4::uuid IS NULL OR v.vendedor_id = $4::uuid)
+    GROUP BY mp.nombre, a.gateway_pago
     ORDER BY total DESC
   `,
 
   GET_VENTAS_PERIODO: `
-    SELECT 
+    SELECT
       COUNT(*) AS total_ventas,
       COUNT(*) FILTER (WHERE v.estado_venta = 'PAGADA') AS ventas_pagadas,
       COUNT(*) FILTER (WHERE v.estado_venta = 'ABONADA') AS ventas_abonadas,
@@ -109,14 +122,15 @@ const SQL_QUERIES = {
     WHERE v.rifa_id = $1
       AND ($2::timestamptz IS NULL OR v.created_at >= $2::timestamptz)
       AND ($3::timestamptz IS NULL OR v.created_at < ($3::timestamptz + interval '1 day'))
+      AND ($4::uuid IS NULL OR v.vendedor_id = $4::uuid)
   `,
 
   /**
-   * LISTADO GENERAL DE VENTAS con toda la información
-   * Params: $1=rifa_id, $2=fecha_inicio, $3=fecha_fin, $4=limit, $5=offset
+   * LISTADO GENERAL DE VENTAS
+   * Params: $1=rifa_id, $2=fecha_inicio, $3=fecha_fin, $4=vendedor_id, $5=limit, $6=offset
    */
   GET_VENTAS_GENERAL: `
-    SELECT 
+    SELECT
       v.id,
       v.rifa_id,
       v.cliente_id,
@@ -137,7 +151,7 @@ const SQL_QUERIES = {
       r.nombre as rifa_nombre,
       r.precio_boleta,
       COALESCE(u.nombre, 'Online') as vendedor_nombre,
-      CASE 
+      CASE
         WHEN v.es_venta_online = true THEN 'ONLINE'
         ELSE 'PUNTO_FISICO'
       END as origen_venta,
@@ -166,9 +180,10 @@ const SQL_QUERIES = {
     WHERE v.rifa_id = $1
       AND ($2::timestamptz IS NULL OR v.created_at >= $2::timestamptz)
       AND ($3::timestamptz IS NULL OR v.created_at < ($3::timestamptz + interval '1 day'))
+      AND ($4::uuid IS NULL OR v.vendedor_id = $4::uuid)
     GROUP BY v.id, c.id, r.id, u.id
     ORDER BY v.created_at DESC
-    LIMIT $4 OFFSET $5
+    LIMIT $5 OFFSET $6
   `,
 
   GET_VENTAS_GENERAL_COUNT: `
@@ -177,10 +192,11 @@ const SQL_QUERIES = {
     WHERE v.rifa_id = $1
       AND ($2::timestamptz IS NULL OR v.created_at >= $2::timestamptz)
       AND ($3::timestamptz IS NULL OR v.created_at < ($3::timestamptz + interval '1 day'))
+      AND ($4::uuid IS NULL OR v.vendedor_id = $4::uuid)
   `,
 
   GET_VENTAS_GENERAL_RESUMEN: `
-    SELECT 
+    SELECT
       COUNT(*) as total_ventas,
       COUNT(*) FILTER (WHERE v.estado_venta = 'PAGADA') as ventas_pagadas,
       COUNT(*) FILTER (WHERE v.estado_venta = 'ABONADA') as ventas_abonadas,
@@ -196,13 +212,9 @@ const SQL_QUERIES = {
     WHERE v.rifa_id = $1
       AND ($2::timestamptz IS NULL OR v.created_at >= $2::timestamptz)
       AND ($3::timestamptz IS NULL OR v.created_at < ($3::timestamptz + interval '1 day'))
+      AND ($4::uuid IS NULL OR v.vendedor_id = $4::uuid)
   `,
 
-  /**
-   * Recaudo del día: suma de TODOS los abonos confirmados cuya fecha de abono
-   * cae dentro del rango seleccionado, SIN IMPORTAR cuándo se creó la venta.
-   * Esto muestra el dinero real que entró en el periodo.
-   */
   GET_RECAUDO_DIA: `
     SELECT
       COALESCE(SUM(a.monto), 0) AS recaudo_dia,
@@ -213,13 +225,9 @@ const SQL_QUERIES = {
       AND a.estado = 'CONFIRMADO'
       AND ($2::timestamptz IS NULL OR a.created_at >= $2::timestamptz)
       AND ($3::timestamptz IS NULL OR a.created_at < ($3::timestamptz + interval '1 day'))
+      AND ($4::uuid IS NULL OR v.vendedor_id = $4::uuid)
   `,
 
-  /**
-   * Listado detallado de abonos del periodo.
-   * Trae cada abono con info del cliente, venta, boletas y medio de pago.
-   * Params: $1=rifa_id, $2=fecha_inicio, $3=fecha_fin
-   */
   GET_ABONOS_DETALLE_PERIODO: `
     SELECT
       a.id AS abono_id,
@@ -253,6 +261,7 @@ const SQL_QUERIES = {
       AND a.estado = 'CONFIRMADO'
       AND ($2::timestamptz IS NULL OR a.created_at >= $2::timestamptz)
       AND ($3::timestamptz IS NULL OR a.created_at < ($3::timestamptz + interval '1 day'))
+      AND ($4::uuid IS NULL OR v.vendedor_id = $4::uuid)
     GROUP BY a.id, a.monto, a.estado, a.notas, a.referencia, a.created_at,
              mp.nombre, a.gateway_pago,
              v.id, v.monto_total, v.abono_total, v.estado_venta, v.created_at, v.es_venta_online,
