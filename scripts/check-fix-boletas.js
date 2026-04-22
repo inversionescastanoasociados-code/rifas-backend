@@ -5,7 +5,7 @@ const pool = new Pool({
 });
 
 async function main() {
-  // 1. Buscar la boleta 2511 en cualquier estado
+  // 1. Buscar la boleta 2511 en cualquier estad
   const b2511 = await pool.query(`
     SELECT b.numero, b.estado, b.bloqueo_hasta, b.venta_id, b.cliente_id,
            c.nombre, c.identificacion
