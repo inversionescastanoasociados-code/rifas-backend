@@ -40,7 +40,7 @@ const SQL_QUERIES = {
         OR b.venta_id IN (
           SELECT id FROM ventas
           WHERE ($2::uuid IS NULL OR vendedor_id = $2::uuid)
-            AND ($3::text IS NULL OR vendedor_id IN (SELECT id FROM usuarios WHERE rol::text = ANY(string_to_array($3::text, ","))))
+            AND ($3::text IS NULL OR vendedor_id IN (SELECT id FROM usuarios WHERE rol::text = ANY(string_to_array($3::text, ','))))
         )
       )
   `,
@@ -60,7 +60,7 @@ const SQL_QUERIES = {
       AND ($2::timestamptz IS NULL OR v.created_at >= $2::timestamptz)
       AND ($3::timestamptz IS NULL OR v.created_at < ($3::timestamptz + interval '1 day'))
       AND ($4::uuid IS NULL OR v.vendedor_id = $4::uuid)
-      AND ($5::text IS NULL OR v.vendedor_id IN (SELECT id FROM usuarios WHERE rol::text = ANY(string_to_array($5::text, ","))))
+      AND ($5::text IS NULL OR v.vendedor_id IN (SELECT id FROM usuarios WHERE rol::text = ANY(string_to_array($5::text, ','))))
   `,
 
   GET_RECAUDO_REAL: `
@@ -73,7 +73,7 @@ const SQL_QUERIES = {
       AND ($2::timestamptz IS NULL OR a.created_at >= $2::timestamptz)
       AND ($3::timestamptz IS NULL OR a.created_at < ($3::timestamptz + interval '1 day'))
       AND ($4::uuid IS NULL OR a.registrado_por = $4::uuid)
-      AND ($5::text IS NULL OR a.registrado_por IN (SELECT id FROM usuarios WHERE rol::text = ANY(string_to_array($5::text, ","))))
+      AND ($5::text IS NULL OR a.registrado_por IN (SELECT id FROM usuarios WHERE rol::text = ANY(string_to_array($5::text, ','))))
   `,
 
   /* Recaudo total histórico (sin filtro de fecha; mantiene filtro opcional por quien REGISTRÓ el abono) */
@@ -85,7 +85,7 @@ const SQL_QUERIES = {
     WHERE v.rifa_id = $1
       AND a.estado = 'CONFIRMADO'
       AND ($2::uuid IS NULL OR a.registrado_por = $2::uuid)
-      AND ($3::text IS NULL OR a.registrado_por IN (SELECT id FROM usuarios WHERE rol::text = ANY(string_to_array($3::text, ","))))
+      AND ($3::text IS NULL OR a.registrado_por IN (SELECT id FROM usuarios WHERE rol::text = ANY(string_to_array($3::text, ','))))
   `,
 
   GET_SERIE_DIARIA: `
@@ -99,7 +99,7 @@ const SQL_QUERIES = {
       AND ($2::timestamptz IS NULL OR a.created_at >= $2::timestamptz)
       AND ($3::timestamptz IS NULL OR a.created_at < ($3::timestamptz + interval '1 day'))
       AND ($4::uuid IS NULL OR a.registrado_por = $4::uuid)
-      AND ($5::text IS NULL OR a.registrado_por IN (SELECT id FROM usuarios WHERE rol::text = ANY(string_to_array($5::text, ","))))
+      AND ($5::text IS NULL OR a.registrado_por IN (SELECT id FROM usuarios WHERE rol::text = ANY(string_to_array($5::text, ','))))
     GROUP BY DATE(a.created_at)
     ORDER BY fecha ASC
   `,
@@ -138,7 +138,7 @@ const SQL_QUERIES = {
       AND ($2::timestamptz IS NULL OR v.created_at >= $2::timestamptz)
       AND ($3::timestamptz IS NULL OR v.created_at < ($3::timestamptz + interval '1 day'))
       AND ($4::uuid IS NULL OR v.vendedor_id = $4::uuid)
-      AND ($5::text IS NULL OR v.vendedor_id IN (SELECT id FROM usuarios WHERE rol::text = ANY(string_to_array($5::text, ","))))
+      AND ($5::text IS NULL OR v.vendedor_id IN (SELECT id FROM usuarios WHERE rol::text = ANY(string_to_array($5::text, ','))))
   `,
 
   /**
@@ -197,7 +197,7 @@ const SQL_QUERIES = {
       AND ($2::timestamptz IS NULL OR v.created_at >= $2::timestamptz)
       AND ($3::timestamptz IS NULL OR v.created_at < ($3::timestamptz + interval '1 day'))
       AND ($4::uuid IS NULL OR v.vendedor_id = $4::uuid)
-      AND ($5::text IS NULL OR v.vendedor_id IN (SELECT id FROM usuarios WHERE rol::text = ANY(string_to_array($5::text, ","))))
+      AND ($5::text IS NULL OR v.vendedor_id IN (SELECT id FROM usuarios WHERE rol::text = ANY(string_to_array($5::text, ','))))
     GROUP BY v.id, c.id, r.id, u.id
     ORDER BY v.created_at DESC
     LIMIT $6 OFFSET $7
@@ -210,7 +210,7 @@ const SQL_QUERIES = {
       AND ($2::timestamptz IS NULL OR v.created_at >= $2::timestamptz)
       AND ($3::timestamptz IS NULL OR v.created_at < ($3::timestamptz + interval '1 day'))
       AND ($4::uuid IS NULL OR v.vendedor_id = $4::uuid)
-      AND ($5::text IS NULL OR v.vendedor_id IN (SELECT id FROM usuarios WHERE rol::text = ANY(string_to_array($5::text, ","))))
+      AND ($5::text IS NULL OR v.vendedor_id IN (SELECT id FROM usuarios WHERE rol::text = ANY(string_to_array($5::text, ','))))
   `,
 
   GET_VENTAS_GENERAL_RESUMEN: `
@@ -231,7 +231,7 @@ const SQL_QUERIES = {
       AND ($2::timestamptz IS NULL OR v.created_at >= $2::timestamptz)
       AND ($3::timestamptz IS NULL OR v.created_at < ($3::timestamptz + interval '1 day'))
       AND ($4::uuid IS NULL OR v.vendedor_id = $4::uuid)
-      AND ($5::text IS NULL OR v.vendedor_id IN (SELECT id FROM usuarios WHERE rol::text = ANY(string_to_array($5::text, ","))))
+      AND ($5::text IS NULL OR v.vendedor_id IN (SELECT id FROM usuarios WHERE rol::text = ANY(string_to_array($5::text, ','))))
   `,
 
   GET_RECAUDO_DIA: `
@@ -245,7 +245,7 @@ const SQL_QUERIES = {
       AND ($2::timestamptz IS NULL OR a.created_at >= $2::timestamptz)
       AND ($3::timestamptz IS NULL OR a.created_at < ($3::timestamptz + interval '1 day'))
       AND ($4::uuid IS NULL OR a.registrado_por = $4::uuid)
-      AND ($5::text IS NULL OR a.registrado_por IN (SELECT id FROM usuarios WHERE rol::text = ANY(string_to_array($5::text, ","))))
+      AND ($5::text IS NULL OR a.registrado_por IN (SELECT id FROM usuarios WHERE rol::text = ANY(string_to_array($5::text, ','))))
   `,
 
   GET_ABONOS_DETALLE_PERIODO: `
@@ -284,7 +284,7 @@ const SQL_QUERIES = {
       AND ($2::timestamptz IS NULL OR a.created_at >= $2::timestamptz)
       AND ($3::timestamptz IS NULL OR a.created_at < ($3::timestamptz + interval '1 day'))
       AND ($4::uuid IS NULL OR a.registrado_por = $4::uuid)
-      AND ($5::text IS NULL OR a.registrado_por IN (SELECT id FROM usuarios WHERE rol::text = ANY(string_to_array($5::text, ","))))
+      AND ($5::text IS NULL OR a.registrado_por IN (SELECT id FROM usuarios WHERE rol::text = ANY(string_to_array($5::text, ','))))
     GROUP BY a.id, a.monto, a.estado, a.notas, a.referencia, a.created_at,
              mp.nombre, a.gateway_pago,
              v.id, v.monto_total, v.abono_total, v.estado_venta, v.created_at, v.es_venta_online,
