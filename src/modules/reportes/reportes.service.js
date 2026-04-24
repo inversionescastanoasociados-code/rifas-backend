@@ -39,7 +39,8 @@ const getReporteRifa = async (rifaId, fechaInicio = null, fechaFin = null, vende
   // 8. Ventas del periodo
   const ventasPeriodo = await query(SQL.GET_VENTAS_PERIODO, params5);
 
-  // 9. Abonado y deuda de boletas ABONADAS - filtrado por periodo y opcionalmente por vendedor / rol
+  // 9. Abonado de boletas ABONADAS dentro del periodo: filtra por quien REGISTRÓ el abono.
+  //    La deuda (saldo restante) se mantiene atribuida al vendedor de la venta porque es un estado de la boleta.
   const abonadoAbonadasQ = `
     SELECT COALESCE(SUM(a.monto), 0) AS abonado_abonadas
     FROM abonos a
@@ -50,8 +51,8 @@ const getReporteRifa = async (rifaId, fechaInicio = null, fechaFin = null, vende
       AND a.estado = 'CONFIRMADO'
       AND ($2::timestamptz IS NULL OR a.created_at >= $2::timestamptz)
       AND ($3::timestamptz IS NULL OR a.created_at < ($3::timestamptz + interval '1 day'))
-      AND ($4::uuid IS NULL OR v.vendedor_id = $4::uuid)
-      AND ($5::text IS NULL OR v.vendedor_id IN (SELECT id FROM usuarios WHERE rol::text = ANY(string_to_array($5::text, ","))))
+      AND ($4::uuid IS NULL OR a.registrado_por = $4::uuid)
+      AND ($5::text IS NULL OR a.registrado_por IN (SELECT id FROM usuarios WHERE rol::text = ANY(string_to_array($5::text, ","))))
   `;
   const deudaAbonadasQ = `
     SELECT COALESCE(SUM(r.precio_boleta - COALESCE(ab.total_abonado, 0)), 0) AS deuda_abonadas

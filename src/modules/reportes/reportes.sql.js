@@ -72,11 +72,11 @@ const SQL_QUERIES = {
       AND a.estado = 'CONFIRMADO'
       AND ($2::timestamptz IS NULL OR a.created_at >= $2::timestamptz)
       AND ($3::timestamptz IS NULL OR a.created_at < ($3::timestamptz + interval '1 day'))
-      AND ($4::uuid IS NULL OR v.vendedor_id = $4::uuid)
-      AND ($5::text IS NULL OR v.vendedor_id IN (SELECT id FROM usuarios WHERE rol::text = ANY(string_to_array($5::text, ","))))
+      AND ($4::uuid IS NULL OR a.registrado_por = $4::uuid)
+      AND ($5::text IS NULL OR a.registrado_por IN (SELECT id FROM usuarios WHERE rol::text = ANY(string_to_array($5::text, ","))))
   `,
 
-  /* Recaudo total histórico (sin filtro de fecha; mantiene filtro opcional de vendedor en $2 o filtro_rol en $3) */
+  /* Recaudo total histórico (sin filtro de fecha; mantiene filtro opcional por quien REGISTRÓ el abono) */
   GET_RECAUDO_TOTAL: `
     SELECT
       COALESCE(SUM(a.monto), 0) AS recaudo_total
@@ -84,8 +84,8 @@ const SQL_QUERIES = {
     INNER JOIN ventas v ON v.id = a.venta_id
     WHERE v.rifa_id = $1
       AND a.estado = 'CONFIRMADO'
-      AND ($2::uuid IS NULL OR v.vendedor_id = $2::uuid)
-      AND ($3::text IS NULL OR v.vendedor_id IN (SELECT id FROM usuarios WHERE rol::text = ANY(string_to_array($3::text, ","))))
+      AND ($2::uuid IS NULL OR a.registrado_por = $2::uuid)
+      AND ($3::text IS NULL OR a.registrado_por IN (SELECT id FROM usuarios WHERE rol::text = ANY(string_to_array($3::text, ","))))
   `,
 
   GET_SERIE_DIARIA: `
@@ -98,8 +98,8 @@ const SQL_QUERIES = {
       AND a.estado = 'CONFIRMADO'
       AND ($2::timestamptz IS NULL OR a.created_at >= $2::timestamptz)
       AND ($3::timestamptz IS NULL OR a.created_at < ($3::timestamptz + interval '1 day'))
-      AND ($4::uuid IS NULL OR v.vendedor_id = $4::uuid)
-      AND ($5::text IS NULL OR v.vendedor_id IN (SELECT id FROM usuarios WHERE rol::text = ANY(string_to_array($5::text, ","))))
+      AND ($4::uuid IS NULL OR a.registrado_por = $4::uuid)
+      AND ($5::text IS NULL OR a.registrado_por IN (SELECT id FROM usuarios WHERE rol::text = ANY(string_to_array($5::text, ","))))
     GROUP BY DATE(a.created_at)
     ORDER BY fecha ASC
   `,
@@ -120,8 +120,8 @@ const SQL_QUERIES = {
         AND a.estado = 'CONFIRMADO'
         AND ($2::timestamptz IS NULL OR a.created_at >= $2::timestamptz)
         AND ($3::timestamptz IS NULL OR a.created_at < ($3::timestamptz + interval '1 day'))
-        AND ($4::uuid IS NULL OR v.vendedor_id = $4::uuid)
-        AND ($5::text IS NULL OR v.vendedor_id IN (SELECT id FROM usuarios WHERE rol::text = ANY(string_to_array($5::text, ','))))
+        AND ($4::uuid IS NULL OR a.registrado_por = $4::uuid)
+        AND ($5::text IS NULL OR a.registrado_por IN (SELECT id FROM usuarios WHERE rol::text = ANY(string_to_array($5::text, ','))))
     ) sub
     GROUP BY metodo
     ORDER BY total DESC
@@ -244,8 +244,8 @@ const SQL_QUERIES = {
       AND a.estado = 'CONFIRMADO'
       AND ($2::timestamptz IS NULL OR a.created_at >= $2::timestamptz)
       AND ($3::timestamptz IS NULL OR a.created_at < ($3::timestamptz + interval '1 day'))
-      AND ($4::uuid IS NULL OR v.vendedor_id = $4::uuid)
-      AND ($5::text IS NULL OR v.vendedor_id IN (SELECT id FROM usuarios WHERE rol::text = ANY(string_to_array($5::text, ","))))
+      AND ($4::uuid IS NULL OR a.registrado_por = $4::uuid)
+      AND ($5::text IS NULL OR a.registrado_por IN (SELECT id FROM usuarios WHERE rol::text = ANY(string_to_array($5::text, ","))))
   `,
 
   GET_ABONOS_DETALLE_PERIODO: `
@@ -269,6 +269,7 @@ const SQL_QUERIES = {
       c.identificacion AS cliente_identificacion,
       c.email AS cliente_email,
       COALESCE(u.nombre, 'Online') AS vendedor_nombre,
+      COALESCE(ur.nombre, 'Online') AS registrado_por_nombre,
       ARRAY_AGG(DISTINCT b.numero ORDER BY b.numero) AS numeros_boletas,
       COUNT(DISTINCT b.id) AS cantidad_boletas
     FROM abonos a
@@ -276,18 +277,19 @@ const SQL_QUERIES = {
     INNER JOIN clientes c ON c.id = v.cliente_id
     LEFT JOIN medios_pago mp ON mp.id = a.medio_pago_id
     LEFT JOIN usuarios u ON u.id = v.vendedor_id
+    LEFT JOIN usuarios ur ON ur.id = a.registrado_por
     LEFT JOIN boletas b ON b.venta_id = v.id
     WHERE v.rifa_id = $1
       AND a.estado = 'CONFIRMADO'
       AND ($2::timestamptz IS NULL OR a.created_at >= $2::timestamptz)
       AND ($3::timestamptz IS NULL OR a.created_at < ($3::timestamptz + interval '1 day'))
-      AND ($4::uuid IS NULL OR v.vendedor_id = $4::uuid)
-      AND ($5::text IS NULL OR v.vendedor_id IN (SELECT id FROM usuarios WHERE rol::text = ANY(string_to_array($5::text, ","))))
+      AND ($4::uuid IS NULL OR a.registrado_por = $4::uuid)
+      AND ($5::text IS NULL OR a.registrado_por IN (SELECT id FROM usuarios WHERE rol::text = ANY(string_to_array($5::text, ","))))
     GROUP BY a.id, a.monto, a.estado, a.notas, a.referencia, a.created_at,
              mp.nombre, a.gateway_pago,
              v.id, v.monto_total, v.abono_total, v.estado_venta, v.created_at, v.es_venta_online,
              c.nombre, c.telefono, c.identificacion, c.email,
-             u.nombre
+             u.nombre, ur.nombre
     ORDER BY a.created_at DESC
   `
 };
