@@ -1,14 +1,40 @@
 const service = require('./reportes.service');
 
+const ROLES_PERMITIDOS_FILTRO = ['ADMIN', 'VENDEDOR', 'SUPER_ADMIN'];
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Solo SUPER_ADMIN puede usar los filtros vendedorId / filtroRol.
+ * Para cualquier otro rol se ignoran (se devuelven null).
+ */
+const extraerFiltrosUsuario = (req) => {
+  const rol = String(req.user && req.user.rol || '').toUpperCase();
+  if (rol !== 'SUPER_ADMIN') return { vendedorId: null, filtroRol: null };
+
+  const rawVendedor = req.query.vendedorId;
+  const rawRol = req.query.filtroRol;
+
+  const vendedorId = rawVendedor && UUID_REGEX.test(String(rawVendedor)) ? String(rawVendedor) : null;
+  const filtroRol = rawRol && ROLES_PERMITIDOS_FILTRO.includes(String(rawRol).toUpperCase())
+    ? String(rawRol).toUpperCase()
+    : null;
+
+  // No se permiten ambos a la vez (vendedor concreto gana)
+  if (vendedorId && filtroRol) return { vendedorId, filtroRol: null };
+  return { vendedorId, filtroRol };
+};
+
 const getReporteRifa = async (req, res) => {
   try {
     const { rifaId } = req.params;
     const { fechaInicio, fechaFin } = req.query;
+    const { vendedorId, filtroRol } = extraerFiltrosUsuario(req);
     const data = await service.getReporteRifa(
       rifaId,
       fechaInicio || null,
       fechaFin || null,
-      null
+      vendedorId,
+      filtroRol
     );
     res.json(data);
   } catch (error) {
@@ -23,13 +49,15 @@ const getVentasGeneral = async (req, res) => {
   try {
     const { rifaId } = req.params;
     const { fechaInicio, fechaFin, page = 1, limit = 50 } = req.query;
+    const { vendedorId, filtroRol } = extraerFiltrosUsuario(req);
     const data = await service.getVentasGeneral(
       rifaId,
       fechaInicio || null,
       fechaFin || null,
       Number(page),
       Number(limit),
-      null
+      vendedorId,
+      filtroRol
     );
     res.json({
       success: true,

@@ -4,11 +4,12 @@ const SQL = require('./reportes.sql');
 /**
  * Genera el reporte completo de una rifa.
  * Si vendedorId viene definido, los KPIs se restringen a las ventas de ese usuario.
+ * Si filtroRol viene definido (ej: 'ADMIN'), agrega todas las ventas de los usuarios con ese rol.
  */
-const getReporteRifa = async (rifaId, fechaInicio = null, fechaFin = null, vendedorId = null) => {
+const getReporteRifa = async (rifaId, fechaInicio = null, fechaFin = null, vendedorId = null, filtroRol = null) => {
 
   const hayFiltroFecha = !!(fechaInicio && fechaFin);
-  const params4 = [rifaId, fechaInicio, fechaFin, vendedorId];
+  const params5 = [rifaId, fechaInicio, fechaFin, vendedorId, filtroRol];
 
   // 1. Info de la rifa (no depende de fechas ni vendedor)
   const rifa = await query(SQL.GET_RIFA_RESUMEN, [rifaId]);
@@ -16,29 +17,29 @@ const getReporteRifa = async (rifaId, fechaInicio = null, fechaFin = null, vende
     throw new Error('Rifa no encontrada');
   }
 
-  // 2. Estado ACTUAL de boletas (snapshot, opcionalmente filtrado por vendedor via $2)
-  const boletas = await query(SQL.GET_BOLETAS_RESUMEN, [rifaId, vendedorId]);
+  // 2. Estado ACTUAL de boletas (snapshot, opcionalmente filtrado por vendedor / rol)
+  const boletas = await query(SQL.GET_BOLETAS_RESUMEN, [rifaId, vendedorId, filtroRol]);
 
   // 3. Boletas del periodo
-  const bpRes = await query(SQL.GET_BOLETAS_PERIODO, params4);
+  const bpRes = await query(SQL.GET_BOLETAS_PERIODO, params5);
   const boletasPeriodo = bpRes.rows[0];
 
   // 4. Recaudo filtrado por periodo
-  const recaudo = await query(SQL.GET_RECAUDO_REAL, params4);
+  const recaudo = await query(SQL.GET_RECAUDO_REAL, params5);
 
-  // 5. Recaudo total histórico (sin filtro de fecha; vendedor en $2)
-  const recaudoTotal = await query(SQL.GET_RECAUDO_TOTAL, [rifaId, vendedorId]);
+  // 5. Recaudo total histórico (sin filtro de fecha; vendedor en $2, filtro_rol en $3)
+  const recaudoTotal = await query(SQL.GET_RECAUDO_TOTAL, [rifaId, vendedorId, filtroRol]);
 
   // 6. Serie diaria filtrada
-  const serie = await query(SQL.GET_SERIE_DIARIA, params4);
+  const serie = await query(SQL.GET_SERIE_DIARIA, params5);
 
   // 7. Métodos de pago filtrados
-  const metodos = await query(SQL.GET_METODOS_PAGO, params4);
+  const metodos = await query(SQL.GET_METODOS_PAGO, params5);
 
   // 8. Ventas del periodo
-  const ventasPeriodo = await query(SQL.GET_VENTAS_PERIODO, params4);
+  const ventasPeriodo = await query(SQL.GET_VENTAS_PERIODO, params5);
 
-  // 9. Abonado y deuda de boletas ABONADAS - filtrado por periodo y opcionalmente por vendedor
+  // 9. Abonado y deuda de boletas ABONADAS - filtrado por periodo y opcionalmente por vendedor / rol
   const abonadoAbonadasQ = `
     SELECT COALESCE(SUM(a.monto), 0) AS abonado_abonadas
     FROM abonos a
@@ -50,6 +51,7 @@ const getReporteRifa = async (rifaId, fechaInicio = null, fechaFin = null, vende
       AND ($2::timestamptz IS NULL OR a.created_at >= $2::timestamptz)
       AND ($3::timestamptz IS NULL OR a.created_at < ($3::timestamptz + interval '1 day'))
       AND ($4::uuid IS NULL OR v.vendedor_id = $4::uuid)
+      AND ($5::text IS NULL OR v.vendedor_id IN (SELECT id FROM usuarios WHERE rol = $5::text))
   `;
   const deudaAbonadasQ = `
     SELECT COALESCE(SUM(r.precio_boleta - COALESCE(ab.total_abonado, 0)), 0) AS deuda_abonadas
@@ -64,12 +66,16 @@ const getReporteRifa = async (rifaId, fechaInicio = null, fechaFin = null, vende
     WHERE b.rifa_id = $1
       AND b.estado = 'ABONADA'
       AND (
-        $2::uuid IS NULL
-        OR b.venta_id IN (SELECT id FROM ventas WHERE vendedor_id = $2::uuid)
+        ($2::uuid IS NULL AND $3::text IS NULL)
+        OR b.venta_id IN (
+          SELECT id FROM ventas
+          WHERE ($2::uuid IS NULL OR vendedor_id = $2::uuid)
+            AND ($3::text IS NULL OR vendedor_id IN (SELECT id FROM usuarios WHERE rol = $3::text))
+        )
       )
   `;
-  const abonadoAbonadas = await query(abonadoAbonadasQ, params4);
-  const deudaAbonadas = await query(deudaAbonadasQ, [rifaId, vendedorId]);
+  const abonadoAbonadas = await query(abonadoAbonadasQ, params5);
+  const deudaAbonadas = await query(deudaAbonadasQ, [rifaId, vendedorId, filtroRol]);
 
   const r = rifa.rows[0];
   const rec = recaudo.rows[0];
@@ -109,6 +115,7 @@ const getReporteRifa = async (rifaId, fechaInicio = null, fechaFin = null, vende
     metodos_pago: metodos.rows,
     filtro_aplicado: hayFiltroFecha,
     filtro_vendedor: !!vendedorId,
+    filtro_rol: filtroRol || null,
     fecha_inicio: fechaInicio,
     fecha_fin: fechaFin
   };
@@ -117,6 +124,7 @@ const getReporteRifa = async (rifaId, fechaInicio = null, fechaFin = null, vende
 /**
  * Listado general de ventas con info completa.
  * Si vendedorId viene definido, solo trae ventas de ese vendedor.
+ * Si filtroRol viene definido, solo trae ventas de usuarios con ese rol.
  */
 const getVentasGeneral = async (
   rifaId,
@@ -124,16 +132,17 @@ const getVentasGeneral = async (
   fechaFin = null,
   page = 1,
   limit = 50,
-  vendedorId = null
+  vendedorId = null,
+  filtroRol = null
 ) => {
   const offset = (page - 1) * limit;
-  const params4 = [rifaId, fechaInicio, fechaFin, vendedorId];
+  const params5 = [rifaId, fechaInicio, fechaFin, vendedorId, filtroRol];
 
-  const ventasResult = await query(SQL.GET_VENTAS_GENERAL, [...params4, limit, offset]);
-  const countResult = await query(SQL.GET_VENTAS_GENERAL_COUNT, params4);
-  const resumenResult = await query(SQL.GET_VENTAS_GENERAL_RESUMEN, params4);
-  const recaudoDiaResult = await query(SQL.GET_RECAUDO_DIA, params4);
-  const abonosDetalleResult = await query(SQL.GET_ABONOS_DETALLE_PERIODO, params4);
+  const ventasResult = await query(SQL.GET_VENTAS_GENERAL, [...params5, limit, offset]);
+  const countResult = await query(SQL.GET_VENTAS_GENERAL_COUNT, params5);
+  const resumenResult = await query(SQL.GET_VENTAS_GENERAL_RESUMEN, params5);
+  const recaudoDiaResult = await query(SQL.GET_RECAUDO_DIA, params5);
+  const abonosDetalleResult = await query(SQL.GET_ABONOS_DETALLE_PERIODO, params5);
 
   return {
     ventas: ventasResult.rows.map(v => ({

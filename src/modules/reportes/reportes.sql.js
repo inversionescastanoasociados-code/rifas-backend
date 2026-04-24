@@ -6,8 +6,9 @@
  *   $2 = fecha_inicio (null si no hay filtro)
  *   $3 = fecha_fin (null si no hay filtro)
  *   $4 = vendedor_id (null = sin filtrar por vendedor; si viene, restringe a las ventas de ese usuario)
+ *   $5 = filtro_rol (null = sin filtrar; si viene 'ADMIN' / 'VENDEDOR' / 'SUPER_ADMIN' agrupa todas las ventas de usuarios con ese rol)
  *
- * Para queries paginadas se agrega $5 = limit, $6 = offset.
+ * Para queries paginadas se agrega $6 = limit, $7 = offset.
  */
 
 const SQL_QUERIES = {
@@ -23,7 +24,7 @@ const SQL_QUERIES = {
     WHERE r.id = $1
   `,
 
-  /* Estado ACTUAL de boletas. Si $2 (vendedor_id) viene, solo cuenta boletas de ventas de ese vendedor. */
+  /* Estado ACTUAL de boletas. Si $2 (vendedor_id) o $3 (filtro_rol) vienen, solo cuenta boletas de ventas que cumplan el filtro. */
   GET_BOLETAS_RESUMEN: `
     SELECT
       COUNT(*) AS total_boletas,
@@ -35,8 +36,12 @@ const SQL_QUERIES = {
     FROM boletas b
     WHERE b.rifa_id = $1
       AND (
-        $2::uuid IS NULL
-        OR b.venta_id IN (SELECT id FROM ventas WHERE vendedor_id = $2::uuid)
+        ($2::uuid IS NULL AND $3::text IS NULL)
+        OR b.venta_id IN (
+          SELECT id FROM ventas
+          WHERE ($2::uuid IS NULL OR vendedor_id = $2::uuid)
+            AND ($3::text IS NULL OR vendedor_id IN (SELECT id FROM usuarios WHERE rol = $3::text))
+        )
       )
   `,
 
@@ -55,6 +60,7 @@ const SQL_QUERIES = {
       AND ($2::timestamptz IS NULL OR v.created_at >= $2::timestamptz)
       AND ($3::timestamptz IS NULL OR v.created_at < ($3::timestamptz + interval '1 day'))
       AND ($4::uuid IS NULL OR v.vendedor_id = $4::uuid)
+      AND ($5::text IS NULL OR v.vendedor_id IN (SELECT id FROM usuarios WHERE rol = $5::text))
   `,
 
   GET_RECAUDO_REAL: `
@@ -67,9 +73,10 @@ const SQL_QUERIES = {
       AND ($2::timestamptz IS NULL OR a.created_at >= $2::timestamptz)
       AND ($3::timestamptz IS NULL OR a.created_at < ($3::timestamptz + interval '1 day'))
       AND ($4::uuid IS NULL OR v.vendedor_id = $4::uuid)
+      AND ($5::text IS NULL OR v.vendedor_id IN (SELECT id FROM usuarios WHERE rol = $5::text))
   `,
 
-  /* Recaudo total histórico (sin filtro de fecha; mantiene filtro opcional de vendedor en $2) */
+  /* Recaudo total histórico (sin filtro de fecha; mantiene filtro opcional de vendedor en $2 o filtro_rol en $3) */
   GET_RECAUDO_TOTAL: `
     SELECT
       COALESCE(SUM(a.monto), 0) AS recaudo_total
@@ -78,6 +85,7 @@ const SQL_QUERIES = {
     WHERE v.rifa_id = $1
       AND a.estado = 'CONFIRMADO'
       AND ($2::uuid IS NULL OR v.vendedor_id = $2::uuid)
+      AND ($3::text IS NULL OR v.vendedor_id IN (SELECT id FROM usuarios WHERE rol = $3::text))
   `,
 
   GET_SERIE_DIARIA: `
@@ -91,6 +99,7 @@ const SQL_QUERIES = {
       AND ($2::timestamptz IS NULL OR a.created_at >= $2::timestamptz)
       AND ($3::timestamptz IS NULL OR a.created_at < ($3::timestamptz + interval '1 day'))
       AND ($4::uuid IS NULL OR v.vendedor_id = $4::uuid)
+      AND ($5::text IS NULL OR v.vendedor_id IN (SELECT id FROM usuarios WHERE rol = $5::text))
     GROUP BY DATE(a.created_at)
     ORDER BY fecha ASC
   `,
@@ -108,6 +117,7 @@ const SQL_QUERIES = {
       AND ($2::timestamptz IS NULL OR a.created_at >= $2::timestamptz)
       AND ($3::timestamptz IS NULL OR a.created_at < ($3::timestamptz + interval '1 day'))
       AND ($4::uuid IS NULL OR v.vendedor_id = $4::uuid)
+      AND ($5::text IS NULL OR v.vendedor_id IN (SELECT id FROM usuarios WHERE rol = $5::text))
     GROUP BY mp.nombre, a.gateway_pago
     ORDER BY total DESC
   `,
@@ -123,11 +133,12 @@ const SQL_QUERIES = {
       AND ($2::timestamptz IS NULL OR v.created_at >= $2::timestamptz)
       AND ($3::timestamptz IS NULL OR v.created_at < ($3::timestamptz + interval '1 day'))
       AND ($4::uuid IS NULL OR v.vendedor_id = $4::uuid)
+      AND ($5::text IS NULL OR v.vendedor_id IN (SELECT id FROM usuarios WHERE rol = $5::text))
   `,
 
   /**
    * LISTADO GENERAL DE VENTAS
-   * Params: $1=rifa_id, $2=fecha_inicio, $3=fecha_fin, $4=vendedor_id, $5=limit, $6=offset
+   * Params: $1=rifa_id, $2=fecha_inicio, $3=fecha_fin, $4=vendedor_id, $5=filtro_rol, $6=limit, $7=offset
    */
   GET_VENTAS_GENERAL: `
     SELECT
@@ -181,9 +192,10 @@ const SQL_QUERIES = {
       AND ($2::timestamptz IS NULL OR v.created_at >= $2::timestamptz)
       AND ($3::timestamptz IS NULL OR v.created_at < ($3::timestamptz + interval '1 day'))
       AND ($4::uuid IS NULL OR v.vendedor_id = $4::uuid)
+      AND ($5::text IS NULL OR v.vendedor_id IN (SELECT id FROM usuarios WHERE rol = $5::text))
     GROUP BY v.id, c.id, r.id, u.id
     ORDER BY v.created_at DESC
-    LIMIT $5 OFFSET $6
+    LIMIT $6 OFFSET $7
   `,
 
   GET_VENTAS_GENERAL_COUNT: `
@@ -193,6 +205,7 @@ const SQL_QUERIES = {
       AND ($2::timestamptz IS NULL OR v.created_at >= $2::timestamptz)
       AND ($3::timestamptz IS NULL OR v.created_at < ($3::timestamptz + interval '1 day'))
       AND ($4::uuid IS NULL OR v.vendedor_id = $4::uuid)
+      AND ($5::text IS NULL OR v.vendedor_id IN (SELECT id FROM usuarios WHERE rol = $5::text))
   `,
 
   GET_VENTAS_GENERAL_RESUMEN: `
@@ -213,6 +226,7 @@ const SQL_QUERIES = {
       AND ($2::timestamptz IS NULL OR v.created_at >= $2::timestamptz)
       AND ($3::timestamptz IS NULL OR v.created_at < ($3::timestamptz + interval '1 day'))
       AND ($4::uuid IS NULL OR v.vendedor_id = $4::uuid)
+      AND ($5::text IS NULL OR v.vendedor_id IN (SELECT id FROM usuarios WHERE rol = $5::text))
   `,
 
   GET_RECAUDO_DIA: `
@@ -226,6 +240,7 @@ const SQL_QUERIES = {
       AND ($2::timestamptz IS NULL OR a.created_at >= $2::timestamptz)
       AND ($3::timestamptz IS NULL OR a.created_at < ($3::timestamptz + interval '1 day'))
       AND ($4::uuid IS NULL OR v.vendedor_id = $4::uuid)
+      AND ($5::text IS NULL OR v.vendedor_id IN (SELECT id FROM usuarios WHERE rol = $5::text))
   `,
 
   GET_ABONOS_DETALLE_PERIODO: `
@@ -262,6 +277,7 @@ const SQL_QUERIES = {
       AND ($2::timestamptz IS NULL OR a.created_at >= $2::timestamptz)
       AND ($3::timestamptz IS NULL OR a.created_at < ($3::timestamptz + interval '1 day'))
       AND ($4::uuid IS NULL OR v.vendedor_id = $4::uuid)
+      AND ($5::text IS NULL OR v.vendedor_id IN (SELECT id FROM usuarios WHERE rol = $5::text))
     GROUP BY a.id, a.monto, a.estado, a.notas, a.referencia, a.created_at,
              mp.nombre, a.gateway_pago,
              v.id, v.monto_total, v.abono_total, v.estado_venta, v.created_at, v.es_venta_online,
