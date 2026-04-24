@@ -1,11 +1,18 @@
 const service = require('./reportes.service');
 
-const ROLES_PERMITIDOS_FILTRO = ['ADMIN', 'VENDEDOR', 'SUPER_ADMIN'];
+const ROLES_PERMITIDOS_FILTRO = ['ADMIN', 'VENDEDOR', 'SUPER_ADMIN', 'ADMINS'];
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Solo SUPER_ADMIN puede usar los filtros vendedorId / filtroRol.
  * Para cualquier otro rol se ignoran (se devuelven null).
+ *
+ * filtroRol:
+ *   - 'ADMINS'      → agrupa todas las ventas de usuarios ADMIN + SUPER_ADMIN
+ *   - 'ADMIN'       → solo rol ADMIN
+ *   - 'SUPER_ADMIN' → solo SUPER_ADMIN
+ *   - 'VENDEDOR'    → solo VENDEDOR
+ * Internamente se traduce a una lista separada por comas para la query.
  */
 const extraerFiltrosUsuario = (req) => {
   const rol = String(req.user && req.user.rol || '').toUpperCase();
@@ -15,9 +22,16 @@ const extraerFiltrosUsuario = (req) => {
   const rawRol = req.query.filtroRol;
 
   const vendedorId = rawVendedor && UUID_REGEX.test(String(rawVendedor)) ? String(rawVendedor) : null;
-  const filtroRol = rawRol && ROLES_PERMITIDOS_FILTRO.includes(String(rawRol).toUpperCase())
-    ? String(rawRol).toUpperCase()
-    : null;
+  const rolUpper = rawRol ? String(rawRol).toUpperCase() : null;
+
+  let filtroRol = null;
+  if (rolUpper && ROLES_PERMITIDOS_FILTRO.includes(rolUpper)) {
+    if (rolUpper === 'ADMINS') {
+      filtroRol = 'ADMIN,SUPER_ADMIN';
+    } else {
+      filtroRol = rolUpper;
+    }
+  }
 
   // No se permiten ambos a la vez (vendedor concreto gana)
   if (vendedorId && filtroRol) return { vendedorId, filtroRol: null };

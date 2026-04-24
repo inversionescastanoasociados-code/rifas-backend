@@ -51,7 +51,7 @@ const getReporteRifa = async (rifaId, fechaInicio = null, fechaFin = null, vende
       AND ($2::timestamptz IS NULL OR a.created_at >= $2::timestamptz)
       AND ($3::timestamptz IS NULL OR a.created_at < ($3::timestamptz + interval '1 day'))
       AND ($4::uuid IS NULL OR v.vendedor_id = $4::uuid)
-      AND ($5::text IS NULL OR v.vendedor_id IN (SELECT id FROM usuarios WHERE rol::text = $5::text))
+      AND ($5::text IS NULL OR v.vendedor_id IN (SELECT id FROM usuarios WHERE rol::text = ANY(string_to_array($5::text, ","))))
   `;
   const deudaAbonadasQ = `
     SELECT COALESCE(SUM(r.precio_boleta - COALESCE(ab.total_abonado, 0)), 0) AS deuda_abonadas
@@ -70,7 +70,7 @@ const getReporteRifa = async (rifaId, fechaInicio = null, fechaFin = null, vende
         OR b.venta_id IN (
           SELECT id FROM ventas
           WHERE ($2::uuid IS NULL OR vendedor_id = $2::uuid)
-            AND ($3::text IS NULL OR vendedor_id IN (SELECT id FROM usuarios WHERE rol::text = $3::text))
+            AND ($3::text IS NULL OR vendedor_id IN (SELECT id FROM usuarios WHERE rol::text = ANY(string_to_array($3::text, ","))))
         )
       )
   `;
