@@ -42,6 +42,10 @@ class RecordatorioService {
         conditions.push(`bs.reservadas > 0`);
       } else if (filtro === 'abonadas') {
         conditions.push(`bs.abonadas > 0`);
+      } else if (filtro === 'crucero') {
+        // 'crucero' - clients with at least one pending boleta with abono < 90000
+        // (includes RESERVADA boletas which have abono = 0)
+        conditions.push(`bs.crucero_boletas > 0`);
       } else {
         // 'todos' - clients with any pending boletas
         conditions.push(`(bs.reservadas > 0 OR bs.abonadas > 0)`);
@@ -77,6 +81,10 @@ class RecordatorioService {
             COUNT(*) FILTER (WHERE b.estado = 'ABONADA') AS abonadas,
             COUNT(*) FILTER (WHERE b.estado = 'PAGADA') AS pagadas,
             COUNT(*) AS total_boletas,
+            COUNT(*) FILTER (
+              WHERE b.estado IN ('RESERVADA','ABONADA')
+                AND COALESCE(ab.total_abonado, 0) < 90000
+            ) AS crucero_boletas,
             COALESCE(SUM(
               CASE WHEN b.estado IN ('RESERVADA','ABONADA') THEN
                 GREATEST(
@@ -119,6 +127,7 @@ class RecordatorioService {
           COALESCE(bs.pagadas, 0)::int AS boletas_pagadas,
           COALESCE(bs.reservadas, 0)::int AS boletas_reservadas,
           COALESCE(bs.abonadas, 0)::int AS boletas_abonadas,
+          COALESCE(bs.crucero_boletas, 0)::int AS boletas_crucero,
           COALESCE(bs.deuda_total, 0)::numeric AS deuda_total,
           COALESCE(ni.total_notificaciones, 0)::int AS total_notificaciones,
           ni.ultima_notificacion,
@@ -227,8 +236,16 @@ class RecordatorioService {
           SELECT 
             b.cliente_id,
             COUNT(*) FILTER (WHERE b.estado = 'RESERVADA') AS reservadas,
-            COUNT(*) FILTER (WHERE b.estado = 'ABONADA') AS abonadas
+            COUNT(*) FILTER (WHERE b.estado = 'ABONADA') AS abonadas,
+            COUNT(*) FILTER (
+              WHERE b.estado IN ('RESERVADA','ABONADA')
+                AND COALESCE(ab.total_abonado, 0) < 90000
+            ) AS crucero_boletas
           FROM boletas b
+          LEFT JOIN LATERAL (
+            SELECT COALESCE(SUM(a.monto) FILTER (WHERE a.estado = 'CONFIRMADO'), 0) AS total_abonado
+            FROM abonos a WHERE a.boleta_id = b.id
+          ) ab ON true
           WHERE 1=1 ${vendedorCondition}
           GROUP BY b.cliente_id
         ),
@@ -240,6 +257,7 @@ class RecordatorioService {
           COUNT(*) FILTER (WHERE bs.reservadas > 0 OR bs.abonadas > 0) AS total_pendientes,
           COUNT(*) FILTER (WHERE bs.reservadas > 0) AS con_reservadas,
           COUNT(*) FILTER (WHERE bs.abonadas > 0) AS con_abonadas,
+          COUNT(*) FILTER (WHERE bs.crucero_boletas > 0) AS con_crucero,
           COUNT(*) FILTER (WHERE (bs.reservadas > 0 OR bs.abonadas > 0) AND ni.cliente_id IS NOT NULL) AS notificados,
           COUNT(*) FILTER (WHERE (bs.reservadas > 0 OR bs.abonadas > 0) AND ni.cliente_id IS NULL) AS no_notificados
         FROM boleta_stats bs
