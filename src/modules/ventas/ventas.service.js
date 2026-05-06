@@ -1249,14 +1249,19 @@ async buscarBoletaParaAbono(numeroBoleta, rifaId = null) {
         abonosPorBoleta.set(abono.boleta_id, { total: 0, abonos: [] });
       }
       const entry = abonosPorBoleta.get(abono.boleta_id);
-      entry.total += Number(abono.monto);
+      // Solo sumar al total si NO está ANULADO
+      if (abono.estado !== 'ANULADO') {
+        entry.total += Number(abono.monto);
+      }
       entry.abonos.push({
         id: abono.id, monto: Number(abono.monto), estado: abono.estado,
         metodo_pago: abono.gateway_pago || 'N/A', notas: abono.notas, fecha: abono.created_at
       });
     }
 
-    const totalPagado = abonosResult.rows.reduce((sum, a) => sum + Number(a.monto), 0);
+    const totalPagado = abonosResult.rows
+      .filter(a => a.estado !== 'ANULADO')
+      .reduce((sum, a) => sum + Number(a.monto), 0);
 
     const boletasConFinanzas = todasBoletas.map(b => {
       const entry = abonosPorBoleta.get(b.id) || { total: 0, abonos: [] };
@@ -1326,12 +1331,13 @@ const abonosResult = await query(
 
 const abonos = abonosResult.rows;
 
-// ⬇⬇⬇ ESTO FALTABA
-const totalPagado = abonos.reduce(
+// Solo abonos activos (no ANULADO) para cálculos financieros
+const abonosActivos = abonos.filter(a => a.estado !== 'ANULADO');
+
+const totalPagado = abonosActivos.reduce(
   (sum, a) => sum + Number(a.monto),
   0
 );
-// ⬆⬆⬆
 
   const montoTotal = Number(venta.monto_total);
   const saldoPendienteTotal = Math.max(montoTotal - totalPagado, 0);
@@ -1367,10 +1373,13 @@ const totalPagado = abonos.reduce(
       abonosDetallePorBoleta.set(boletaId, []);
     }
 
-    abonosPorBoleta.set(
-      boletaId,
-      abonosPorBoleta.get(boletaId) + monto
-    );
+    // Solo sumar al total si NO está ANULADO
+    if (abono.estado !== 'ANULADO') {
+      abonosPorBoleta.set(
+        boletaId,
+        abonosPorBoleta.get(boletaId) + monto
+      );
+    }
 
     abonosDetallePorBoleta.get(boletaId).push({
       id: abono.id,
@@ -1434,7 +1443,7 @@ async getVentasPorCliente(clienteId) {
     const abonos = await query(
       `SELECT COALESCE(SUM(monto),0) as total_pagado
        FROM abonos
-       WHERE venta_id = $1`,
+       WHERE venta_id = $1 AND estado != 'ANULADO'`,
       [venta.id]
     );
 
