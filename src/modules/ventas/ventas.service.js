@@ -929,10 +929,10 @@ class VentaService {
         throw new Error('La boleta no pertenece a esta venta');
       }
 
-      // Calcular saldo pendiente de ESTA boleta
+      // Calcular saldo pendiente de ESTA boleta (excluir ANULADO)
       const abonosBoletaResult = await tx.query(
         `SELECT COALESCE(SUM(monto), 0) as total_pagado
-         FROM abonos WHERE venta_id = $1 AND boleta_id = $2`,
+         FROM abonos WHERE venta_id = $1 AND boleta_id = $2 AND estado != 'ANULADO'`,
         [ventaId, boletaId]
       );
       const pagadoBoleta = Number(abonosBoletaResult.rows[0].total_pagado);
@@ -968,10 +968,10 @@ class VentaService {
       // ═══════════════════════════════════════════════
       // MODO B: Abono GENERAL (distribuir entre boletas)
       // ═══════════════════════════════════════════════
-      // Calcular total pagado actual de la venta
+      // Calcular total pagado actual de la venta (excluir ANULADO)
       const abonosActualesResult = await tx.query(
         `SELECT COALESCE(SUM(monto), 0) as total_pagado
-         FROM abonos WHERE venta_id = $1`,
+         FROM abonos WHERE venta_id = $1 AND estado != 'ANULADO'`,
         [ventaId]
       );
       const totalPagadoActual = Number(abonosActualesResult.rows[0].total_pagado);
@@ -999,10 +999,10 @@ class VentaService {
         );
       }
 
-      // Actualizar estado de cada boleta individualmente
+      // Actualizar estado de cada boleta individualmente (excluir ANULADO)
       for (const boleta of boletas) {
         const abBoleta = await tx.query(
-          `SELECT COALESCE(SUM(monto), 0) as total FROM abonos WHERE venta_id = $1 AND boleta_id = $2`,
+          `SELECT COALESCE(SUM(monto), 0) as total FROM abonos WHERE venta_id = $1 AND boleta_id = $2 AND estado != 'ANULADO'`,
           [ventaId, boleta.id]
         );
         const pagado = Number(abBoleta.rows[0].total);
@@ -1015,10 +1015,10 @@ class VentaService {
     }
 
     // ═══════════════════════════════════════════════
-    // Recalcular totales de la venta
+    // Recalcular totales de la venta (excluir ANULADO)
     // ═══════════════════════════════════════════════
     const nuevoTotalResult = await tx.query(
-      `SELECT COALESCE(SUM(monto), 0) as total FROM abonos WHERE venta_id = $1`,
+      `SELECT COALESCE(SUM(monto), 0) as total FROM abonos WHERE venta_id = $1 AND estado != 'ANULADO'`,
       [ventaId]
     );
     const nuevoTotalPagado = Number(nuevoTotalResult.rows[0].total);
@@ -1114,9 +1114,9 @@ async registrarAbonoMultiBoleta(ventaId, boletasAbono, medioPagoId, moneda, user
         throw new Error(`La boleta ${boleta_id} no pertenece a esta venta`);
       }
 
-      // Calcular saldo de esta boleta
+      // Calcular saldo de esta boleta (excluir ANULADO)
       const abonosBoleta = await tx.query(
-        `SELECT COALESCE(SUM(monto), 0) as total_pagado FROM abonos WHERE venta_id = $1 AND boleta_id = $2`,
+        `SELECT COALESCE(SUM(monto), 0) as total_pagado FROM abonos WHERE venta_id = $1 AND boleta_id = $2 AND estado != 'ANULADO'`,
         [ventaId, boleta_id]
       );
       const pagadoBoleta = Number(abonosBoleta.rows[0].total_pagado);
@@ -1148,9 +1148,9 @@ async registrarAbonoMultiBoleta(ventaId, boletasAbono, medioPagoId, moneda, user
       );
     }
 
-    // 5) Recalcular totales de la venta
+    // 5) Recalcular totales de la venta (excluir ANULADO)
     const nuevoTotalResult = await tx.query(
-      `SELECT COALESCE(SUM(monto), 0) as total FROM abonos WHERE venta_id = $1`,
+      `SELECT COALESCE(SUM(monto), 0) as total FROM abonos WHERE venta_id = $1 AND estado != 'ANULADO'`,
       [ventaId]
     );
     const nuevoTotalPagado = Number(nuevoTotalResult.rows[0].total);
