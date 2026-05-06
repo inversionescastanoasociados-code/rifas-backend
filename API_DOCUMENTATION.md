@@ -5,7 +5,7 @@
 ### 🔐 Autenticación
 Todos los endpoints del módulo `/api/public` requieren un **API Key** en el header:
 ```
-x-api-key: TU_API_KEY_PUBLIC
+x-api-key TU_API_KEY_PUBLIC
 ```
 
 ---
