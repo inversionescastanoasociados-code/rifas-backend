@@ -78,7 +78,11 @@ class RecordatorioService {
           SELECT 
             b.cliente_id,
             COUNT(*) FILTER (WHERE b.estado = 'RESERVADA') AS reservadas,
-            COUNT(*) FILTER (WHERE b.estado = 'ABONADA') AS abonadas,
+            COUNT(*) FILTER (
+              WHERE b.estado = 'ABONADA'
+                AND COALESCE(ab.total_abonado, 0) > 0
+                AND COALESCE(ab.total_abonado, 0) < 90000
+            ) AS abonadas,
             COUNT(*) FILTER (WHERE b.estado = 'PAGADA') AS pagadas,
             COUNT(*) AS total_boletas,
             COUNT(*) FILTER (
@@ -236,7 +240,11 @@ class RecordatorioService {
           SELECT 
             b.cliente_id,
             COUNT(*) FILTER (WHERE b.estado = 'RESERVADA') AS reservadas,
-            COUNT(*) FILTER (WHERE b.estado = 'ABONADA') AS abonadas,
+            COUNT(*) FILTER (
+              WHERE b.estado = 'ABONADA'
+                AND COALESCE(ab.total_abonado, 0) > 0
+                AND COALESCE(ab.total_abonado, 0) < 90000
+            ) AS abonadas,
             COUNT(*) FILTER (
               WHERE b.estado IN ('RESERVADA','ABONADA')
                 AND COALESCE(ab.total_abonado, 0) < 90000
