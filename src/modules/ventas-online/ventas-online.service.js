@@ -358,7 +358,7 @@ class VentasOnlineService {
         precio_boleta: precioBoleta,
         cliente_nombre: cliente.nombre.trim(),
         expires_at: expiresAt,
-        mensaje: `Reserva creada exitosamente. Su reserva es válida hasta el día del sorteo. Un administrador revisará y aprobará su compra.`,
+        mensaje: `Reserva creada exitosamente. Para participar en los premios anticipados: mínimo $90.000 abonados todos los sábados por $2.000.000 acumulables. Premio mayor el 20 de junio: boleta pagada al 100%.`,
         instrucciones: [
           'Envíe su comprobante de pago al administrador.',
           'Su reserva será revisada y confirmada.',
