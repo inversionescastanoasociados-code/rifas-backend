@@ -212,7 +212,7 @@ const getSeguimientoClientes = async ({
   // filtro estado boleta
   if (estadoBoleta && estadoBoleta !== 'todas') {
     p++;
-    whereParts.push(`b.estado = $${p}::boleta_estado`);
+    whereParts.push(`b.estado = $${p}::estado_boleta`);
     params.push(estadoBoleta);
   }
 
