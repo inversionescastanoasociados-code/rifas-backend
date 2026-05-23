@@ -142,9 +142,48 @@ const getMisVentasGeneral = async (req, res) => {
   }
 };
 
-module.exports = {
+const getSeguimientoClientes = async (req, res) => {
+  try {
+    const page         = Math.max(1, parseInt(req.query.page  || '1',  10));
+    const limit        = Math.min(50, Math.max(1, parseInt(req.query.limit || '20', 10)));
+    const search       = (req.query.search       || '').trim().substring(0, 100);
+    const estadoBoleta = (req.query.estadoBoleta || 'todas').trim();
+    const notificado   = (req.query.notificado   || 'todos').trim();
+    const rifaId       = req.query.rifaId && UUID_REGEX.test(req.query.rifaId)
+      ? req.query.rifaId : null;
+
+    // filtro de rango de abono (solo válido cuando estadoBoleta === 'ABONADA')
+    const rawMin = parseFloat(req.query.abonoMin);
+    const rawMax = parseFloat(req.query.abonoMax);
+    const abonoMin = estadoBoleta === 'ABONADA' && !isNaN(rawMin) && rawMin >= 0 ? rawMin : null;
+    const abonoMax = estadoBoleta === 'ABONADA' && !isNaN(rawMax) && rawMax >= 0 ? rawMax : null;
+
+    const ESTADOS_VALIDOS   = ['todas', 'RESERVADA', 'ABONADA', 'PAGADA'];
+    const NOTIFICADO_VALIDO = ['todos', 'si', 'no'];
+
+    if (!ESTADOS_VALIDOS.includes(estadoBoleta)) {
+      return res.status(400).json({ success: false, message: 'estadoBoleta inválido' });
+    }
+    if (!NOTIFICADO_VALIDO.includes(notificado)) {
+      return res.status(400).json({ success: false, message: 'notificado inválido' });
+    }
+
+    const data = await service.getSeguimientoClientes({
+      page, limit, search, estadoBoleta, notificado, rifaId, abonoMin, abonoMax,
+    });
+
+    res.json({ success: true, ...data });
+  } catch (error) {
+    console.error('[SEGUIMIENTO CLIENTES ERROR]', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Error obteniendo seguimiento de clientes'
+    });
+  }
+};
   getReporteRifa,
   getVentasGeneral,
   getMisReportesRifa,
-  getMisVentasGeneral
+  getMisVentasGeneral,
+  getSeguimientoClientes,
 };

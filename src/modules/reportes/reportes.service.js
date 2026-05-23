@@ -181,4 +181,215 @@ const getVentasGeneral = async (
   };
 };
 
-module.exports = { getReporteRifa, getVentasGeneral };
+/**
+ * Retorna una lista paginada de clientes con sus boletas,
+ * abonos, saldos e info de recordatorios.
+ * Solo para ADMIN / SUPER_ADMIN.
+ *
+ * Filtros disponibles:
+ *   search         – nombre | teléfono | número de boleta
+ *   estado_boleta  – 'todas' | 'RESERVADA' | 'ABONADA' | 'PAGADA'
+ *   notificado     – 'todos' | 'si' | 'no'
+ *   rifa_id        – uuid (opcional)
+ *   page / limit   – paginación
+ */
+const getSeguimientoClientes = async ({
+  page = 1,
+  limit = 20,
+  search = '',
+  estadoBoleta = 'todas',
+  notificado = 'todos',
+  rifaId = null,
+  abonoMin = null,
+  abonoMax = null,
+} = {}) => {
+  const params = [];
+  let p = 0;
+
+  // ── condiciones de filtro ───────────────────────────────────────────────
+  const whereParts = [`b.estado != 'DISPONIBLE'`];
+
+  // filtro estado boleta
+  if (estadoBoleta && estadoBoleta !== 'todas') {
+    p++;
+    whereParts.push(`b.estado = $${p}::boleta_estado`);
+    params.push(estadoBoleta);
+  }
+
+  // filtro rango de abono (solo aplica sobre boletas ABONADAS)
+  // Se filtra sobre el lateral subquery de abono (ab.total_abonado)
+  if (estadoBoleta === 'ABONADA' && abonoMin !== null && Number.isFinite(abonoMin)) {
+    p++;
+    whereParts.push(`COALESCE(ab_lat.total_abonado,0) >= $${p}`);
+    params.push(abonoMin);
+  }
+  if (estadoBoleta === 'ABONADA' && abonoMax !== null && Number.isFinite(abonoMax)) {
+    p++;
+    whereParts.push(`COALESCE(ab_lat.total_abonado,0) <= $${p}`);
+    params.push(abonoMax);
+  }
+
+  // filtro rifa
+  if (rifaId) {
+    p++;
+    whereParts.push(`b.rifa_id = $${p}::uuid`);
+    params.push(rifaId);
+  }
+
+  // búsqueda: nombre, teléfono o número de boleta
+  // Si el término es numérico tratamos de matchear numero de boleta también
+  if (search && search.trim()) {
+    const term = search.trim();
+    p++;
+    const pTerm = p;
+    params.push(`%${term}%`);
+
+    // intentar parsear como número de boleta
+    const numBoleta = parseInt(term, 10);
+    if (!isNaN(numBoleta) && numBoleta > 0 && numBoleta < 65536) {
+      p++;
+      params.push(numBoleta);
+      whereParts.push(`(
+        c.nombre      ILIKE $${pTerm}
+        OR c.telefono ILIKE $${pTerm}
+        OR b.numero   = $${p}::smallint
+      )`);
+    } else {
+      whereParts.push(`(
+        c.nombre      ILIKE $${pTerm}
+        OR c.telefono ILIKE $${pTerm}
+      )`);
+    }
+  }
+
+  const whereClause = whereParts.join(' AND ');
+
+  // ── CTE principal ───────────────────────────────────────────────────────
+  const baseCTE = `
+    WITH notif_info AS (
+      SELECT
+        cliente_id,
+        COUNT(*)         AS total_notificaciones,
+        MAX(created_at)  AS ultima_notificacion
+      FROM notificaciones_recordatorio
+      GROUP BY cliente_id
+    ),
+    boletas_base AS (
+      SELECT
+        c.id              AS cliente_id,
+        c.nombre,
+        c.telefono,
+        c.email,
+        c.identificacion,
+        c.created_at      AS cliente_created_at,
+        b.id              AS boleta_id,
+        b.numero,
+        b.estado          AS boleta_estado,
+        b.created_at      AS boleta_created_at,
+        r.id              AS rifa_id,
+        r.nombre          AS rifa_nombre,
+        r.precio_boleta,
+        COALESCE(ab_lat.total_abonado, 0)                                       AS abono_total,
+        GREATEST(r.precio_boleta - COALESCE(ab_lat.total_abonado, 0), 0)        AS saldo_pendiente,
+        v.created_at      AS fecha_venta,
+        COALESCE(ni.total_notificaciones, 0)::int                               AS total_notificaciones,
+        ni.ultima_notificacion
+      FROM clientes c
+      INNER JOIN boletas b            ON b.cliente_id   = c.id
+      INNER JOIN rifas   r            ON r.id           = b.rifa_id
+      LEFT  JOIN ventas  v            ON v.id           = b.venta_id
+      LEFT  JOIN notif_info ni        ON ni.cliente_id  = c.id
+      LEFT  JOIN LATERAL (
+        SELECT COALESCE(SUM(a.monto) FILTER (WHERE a.estado = 'CONFIRMADO'), 0) AS total_abonado
+        FROM abonos a WHERE a.boleta_id = b.id
+      ) ab_lat ON true
+      WHERE ${whereClause}
+    )
+  `;
+
+  // ── condición notificado (se aplica sobre las filas del cliente) ────────
+  let notifCond = '';
+  if (notificado === 'si')  notifCond = 'AND total_notificaciones > 0';
+  if (notificado === 'no')  notifCond = 'AND total_notificaciones = 0';
+
+  // ── contar clientes distintos ───────────────────────────────────────────
+  const countSQL = `
+    ${baseCTE}
+    SELECT COUNT(DISTINCT cliente_id)::int AS total
+    FROM boletas_base
+    WHERE 1=1 ${notifCond}
+  `;
+  const countRes = await query(countSQL, params);
+  const total = parseInt(countRes.rows[0].total, 10);
+
+  // ── datos paginados ─────────────────────────────────────────────────────
+  // Necesitamos los IDs de clientes de la página actual, ordenados por antigüedad
+  p++;
+  params.push(limit);
+  const pLimit = p;
+  p++;
+  params.push((page - 1) * limit);
+  const pOffset = p;
+
+  const dataSQL = `
+    ${baseCTE},
+    clientes_pagina AS (
+      SELECT DISTINCT ON (cliente_id) cliente_id, cliente_created_at
+      FROM boletas_base
+      WHERE 1=1 ${notifCond}
+      ORDER BY cliente_id, cliente_created_at ASC
+    ),
+    clientes_ids AS (
+      SELECT cliente_id
+      FROM clientes_pagina
+      ORDER BY cliente_created_at ASC
+      LIMIT  $${pLimit}
+      OFFSET $${pOffset}
+    )
+    SELECT
+      bb.cliente_id,
+      bb.nombre,
+      bb.telefono,
+      bb.email,
+      bb.identificacion,
+      bb.cliente_created_at,
+      bb.total_notificaciones,
+      bb.ultima_notificacion,
+      JSON_AGG(
+        JSON_BUILD_OBJECT(
+          'boleta_id',       bb.boleta_id,
+          'numero',          bb.numero,
+          'estado',          bb.boleta_estado,
+          'rifa_id',         bb.rifa_id,
+          'rifa_nombre',     bb.rifa_nombre,
+          'precio_boleta',   bb.precio_boleta,
+          'abono_total',     bb.abono_total,
+          'saldo_pendiente', bb.saldo_pendiente,
+          'boleta_created_at', bb.boleta_created_at,
+          'fecha_venta',     bb.fecha_venta
+        )
+        ORDER BY bb.boleta_created_at ASC
+      ) AS boletas
+    FROM boletas_base bb
+    INNER JOIN clientes_ids ci ON ci.cliente_id = bb.cliente_id
+    GROUP BY
+      bb.cliente_id, bb.nombre, bb.telefono, bb.email,
+      bb.identificacion, bb.cliente_created_at,
+      bb.total_notificaciones, bb.ultima_notificacion
+    ORDER BY bb.cliente_created_at ASC
+  `;
+
+  const dataRes = await query(dataSQL, params);
+
+  return {
+    clientes: dataRes.rows,
+    paginacion: {
+      page:        Number(page),
+      limit:       Number(limit),
+      total,
+      total_pages: Math.ceil(total / limit),
+    },
+  };
+};
+
+module.exports = { getReporteRifa, getVentasGeneral, getSeguimientoClientes };

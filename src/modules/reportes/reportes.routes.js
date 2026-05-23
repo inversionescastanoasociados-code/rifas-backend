@@ -39,4 +39,16 @@ router.get(
   controller.getMisVentasGeneral
 );
 
+// =====================================================
+// SEGUIMIENTO DE CLIENTES CON BOLETAS
+// Lista todos los clientes con detalle de boletas,
+// abonos, saldos y recordatorios. Solo ADMIN/SUPER_ADMIN.
+// =====================================================
+router.get(
+  '/seguimiento-clientes',
+  authenticateToken,
+  authorize(['SUPER_ADMIN', 'ADMIN']),
+  controller.getSeguimientoClientes
+);
+
 module.exports = router;
