@@ -181,6 +181,8 @@ const getSeguimientoClientes = async (req, res) => {
     });
   }
 };
+
+module.exports = {
   getReporteRifa,
   getVentasGeneral,
   getMisReportesRifa,
