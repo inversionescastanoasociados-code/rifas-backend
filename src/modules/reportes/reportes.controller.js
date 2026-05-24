@@ -142,8 +142,7 @@ const getMisVentasGeneral = async (req, res) => {
   }
 };
 
-const getSeguimientoClientes = async (req, res) => {
-  try {
+const getSeguimientoClientes = async (req, res) => {  try {
     const page         = Math.max(1, parseInt(req.query.page  || '1',  10));
     const limit        = Math.min(50, Math.max(1, parseInt(req.query.limit || '20', 10)));
     const search       = (req.query.search       || '').trim().substring(0, 100);
@@ -182,10 +181,33 @@ const getSeguimientoClientes = async (req, res) => {
   }
 };
 
+const registrarContactoSeguimiento = async (req, res) => {
+  try {
+    const { clienteId } = req.params;
+    if (!clienteId || !UUID_REGEX.test(clienteId)) {
+      return res.status(400).json({ success: false, message: 'clienteId inválido' });
+    }
+    const nota = req.body && req.body.nota
+      ? String(req.body.nota).trim().substring(0, 500)
+      : null;
+    const registradoPor = req.user && req.user.id ? req.user.id : null;
+
+    const data = await service.registrarContactoSeguimiento({ clienteId, registradoPor, nota });
+    res.json({ success: true, ...data });
+  } catch (error) {
+    console.error('[REGISTRAR CONTACTO ERROR]', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Error registrando contacto'
+    });
+  }
+};
+
 module.exports = {
   getReporteRifa,
   getVentasGeneral,
   getMisReportesRifa,
   getMisVentasGeneral,
   getSeguimientoClientes,
+  registrarContactoSeguimiento,
 };

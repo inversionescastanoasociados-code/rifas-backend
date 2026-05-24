@@ -51,4 +51,12 @@ router.get(
   controller.getSeguimientoClientes
 );
 
+// Registrar un contacto manual a un cliente (ajeno a recordatorios)
+router.post(
+  '/seguimiento-clientes/:clienteId/contacto',
+  authenticateToken,
+  authorize(['SUPER_ADMIN', 'ADMIN']),
+  controller.registrarContactoSeguimiento
+);
+
 module.exports = router;

@@ -274,6 +274,14 @@ const getSeguimientoClientes = async ({
       FROM notificaciones_recordatorio
       GROUP BY cliente_id
     ),
+    contacto_info AS (
+      SELECT
+        cliente_id,
+        COUNT(*)         AS total_contactos,
+        MAX(created_at)  AS ultimo_contacto
+      FROM seguimiento_contactos
+      GROUP BY cliente_id
+    ),
     boletas_base AS (
       SELECT
         c.id              AS cliente_id,
@@ -293,12 +301,15 @@ const getSeguimientoClientes = async ({
         GREATEST(r.precio_boleta - COALESCE(ab_lat.total_abonado, 0), 0)        AS saldo_pendiente,
         v.created_at      AS fecha_venta,
         COALESCE(ni.total_notificaciones, 0)::int                               AS total_notificaciones,
-        ni.ultima_notificacion
+        ni.ultima_notificacion,
+        COALESCE(ci.total_contactos, 0)::int                                    AS total_contactos,
+        ci.ultimo_contacto
       FROM clientes c
       INNER JOIN boletas b            ON b.cliente_id   = c.id
       INNER JOIN rifas   r            ON r.id           = b.rifa_id
       LEFT  JOIN ventas  v            ON v.id           = b.venta_id
       LEFT  JOIN notif_info ni        ON ni.cliente_id  = c.id
+      LEFT  JOIN contacto_info ci     ON ci.cliente_id  = c.id
       LEFT  JOIN LATERAL (
         SELECT COALESCE(SUM(a.monto) FILTER (WHERE a.estado = 'CONFIRMADO'), 0) AS total_abonado
         FROM abonos a WHERE a.boleta_id = b.id
@@ -355,6 +366,8 @@ const getSeguimientoClientes = async ({
       bb.cliente_created_at,
       bb.total_notificaciones,
       bb.ultima_notificacion,
+      bb.total_contactos,
+      bb.ultimo_contacto,
       JSON_AGG(
         JSON_BUILD_OBJECT(
           'boleta_id',       bb.boleta_id,
@@ -375,7 +388,8 @@ const getSeguimientoClientes = async ({
     GROUP BY
       bb.cliente_id, bb.nombre, bb.telefono, bb.email,
       bb.identificacion, bb.cliente_created_at,
-      bb.total_notificaciones, bb.ultima_notificacion
+      bb.total_notificaciones, bb.ultima_notificacion,
+      bb.total_contactos, bb.ultimo_contacto
     ORDER BY bb.cliente_created_at ASC
   `;
 
@@ -392,4 +406,24 @@ const getSeguimientoClientes = async ({
   };
 };
 
-module.exports = { getReporteRifa, getVentasGeneral, getSeguimientoClientes };
+const registrarContactoSeguimiento = async ({ clienteId, registradoPor, nota }) => {
+  // Verificar que el cliente existe
+  const existe = await query('SELECT id FROM clientes WHERE id = $1', [clienteId]);
+  if (!existe.rows.length) throw new Error('Cliente no encontrado');
+
+  await query(
+    `INSERT INTO seguimiento_contactos (cliente_id, registrado_por, nota)
+     VALUES ($1, $2, $3)`,
+    [clienteId, registradoPor || null, nota || null]
+  );
+
+  // Devolver el resumen actualizado de contactos para ese cliente
+  const res = await query(
+    `SELECT COUNT(*)::int AS total_contactos, MAX(created_at) AS ultimo_contacto
+     FROM seguimiento_contactos WHERE cliente_id = $1`,
+    [clienteId]
+  );
+  return res.rows[0];
+};
+
+module.exports = { getReporteRifa, getVentasGeneral, getSeguimientoClientes, registrarContactoSeguimiento };
