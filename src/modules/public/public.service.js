@@ -217,10 +217,17 @@ class PublicService {
         clienteId = newClienteResult.rows[0].id;
       }
 
-      // 4️⃣ Calcular estados según monto pagado
-      const saldoPendiente = total_venta - total_pagado;
-      const esAbono = total_pagado > 0 && total_pagado < total_venta;
-      const esPagoCompleto = total_pagado >= total_venta;
+      // 4️⃣ Recalcular monto desde la BD (nunca confiar en el total del cliente)
+      const montoCalculado = precioBoleta * boletas.length;
+      if (total_venta !== montoCalculado) {
+        logger.warn(`total_venta del cliente (${total_venta}) no coincide con el calculado (${montoCalculado}). Usando valor calculado.`);
+      }
+      const montoVenta = montoCalculado;
+
+      // Calcular estados según monto pagado
+      const saldoPendiente = montoVenta - total_pagado;
+      const esAbono = total_pagado > 0 && total_pagado < montoVenta;
+      const esPagoCompleto = total_pagado >= montoVenta;
 
       let estadoVenta = 'PENDIENTE';
       if (esPagoCompleto) {
@@ -235,7 +242,7 @@ class PublicService {
         [
           rifa_id,
           clienteId,
-          total_venta,
+          montoVenta,
           total_pagado || 0,
           estadoVenta,
           metodo_pago_id || null
@@ -308,7 +315,7 @@ class PublicService {
         venta_id: venta.id,
         estado: estadoVenta,
         cliente_id: clienteId,
-        total_venta,
+        total_venta: montoVenta,
         total_pagado,
         saldo_pendiente: saldoPendiente,
         boletas_bloqueadas: boletas.length,
