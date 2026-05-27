@@ -300,6 +300,8 @@ const getSeguimientoClientes = async ({
         COALESCE(ab_lat.total_abonado, 0)                                       AS abono_total,
         GREATEST(r.precio_boleta - COALESCE(ab_lat.total_abonado, 0), 0)        AS saldo_pendiente,
         v.created_at      AS fecha_venta,
+        CASE WHEN v.es_venta_online = true THEN true ELSE false END AS es_venta_online,
+        COALESCE(u.nombre, NULL)   AS vendedor_nombre,
         COALESCE(ni.total_notificaciones, 0)::int                               AS total_notificaciones,
         ni.ultima_notificacion,
         COALESCE(ci.total_contactos, 0)::int                                    AS total_contactos,
@@ -308,6 +310,7 @@ const getSeguimientoClientes = async ({
       INNER JOIN boletas b            ON b.cliente_id   = c.id
       INNER JOIN rifas   r            ON r.id           = b.rifa_id
       LEFT  JOIN ventas  v            ON v.id           = b.venta_id
+      LEFT  JOIN usuarios u           ON u.id           = v.vendedor_id
       LEFT  JOIN notif_info ni        ON ni.cliente_id  = c.id
       LEFT  JOIN contacto_info ci     ON ci.cliente_id  = c.id
       LEFT  JOIN LATERAL (
@@ -379,7 +382,9 @@ const getSeguimientoClientes = async ({
           'abono_total',     bb.abono_total,
           'saldo_pendiente', bb.saldo_pendiente,
           'boleta_created_at', bb.boleta_created_at,
-          'fecha_venta',     bb.fecha_venta
+          'fecha_venta',       bb.fecha_venta,
+          'es_venta_online',   bb.es_venta_online,
+          'vendedor_nombre',   bb.vendedor_nombre
         )
         ORDER BY bb.boleta_created_at ASC
       ) AS boletas
@@ -391,6 +396,7 @@ const getSeguimientoClientes = async ({
       bb.total_notificaciones, bb.ultima_notificacion,
       bb.total_contactos, bb.ultimo_contacto
     ORDER BY bb.cliente_created_at ASC
+  
   `;
 
   const dataRes = await query(dataSQL, params);
