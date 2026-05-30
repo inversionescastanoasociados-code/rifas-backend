@@ -1306,10 +1306,12 @@ async getVentaDetalleFinanciero(id) {
   // 1) Venta + cliente + rifa
   const ventaResult = await query(
     `SELECT v.*, c.nombre, c.telefono, c.identificacion AS cliente_identificacion,
-            r.nombre AS rifa_nombre
+            r.nombre AS rifa_nombre,
+            u.nombre AS vendedor_nombre, u.email AS vendedor_email
      FROM ventas v
      JOIN clientes c ON v.cliente_id = c.id
      LEFT JOIN rifas r ON v.rifa_id = r.id
+     LEFT JOIN usuarios u ON v.vendedor_id = u.id
      WHERE v.id = $1`,
     [id]
   );
@@ -1416,6 +1418,9 @@ const totalPagado = abonosActivos.reduce(
     cliente_identificacion: venta.cliente_identificacion,
     // del JOIN con rifas
     rifa_nombre: venta.rifa_nombre,
+    // del JOIN con usuarios (vendedor)
+    vendedor_nombre: venta.vendedor_nombre || null,
+    vendedor_email: venta.vendedor_email || null,
     // totales generales
     total_pagado: totalPagado,
     saldo_pendiente: saldoPendienteTotal,
