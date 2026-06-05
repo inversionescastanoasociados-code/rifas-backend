@@ -282,6 +282,14 @@ const getSeguimientoClientes = async ({
       FROM seguimiento_contactos
       GROUP BY cliente_id
     ),
+    whatsapp_info AS (
+      SELECT
+        cliente_id,
+        COUNT(*)         AS total_whatsapp,
+        MAX(created_at)  AS ultimo_whatsapp
+      FROM seguimiento_whatsapp
+      GROUP BY cliente_id
+    ),
     boletas_base AS (
       SELECT
         c.id              AS cliente_id,
@@ -305,7 +313,9 @@ const getSeguimientoClientes = async ({
         COALESCE(ni.total_notificaciones, 0)::int                               AS total_notificaciones,
         ni.ultima_notificacion,
         COALESCE(ci.total_contactos, 0)::int                                    AS total_contactos,
-        ci.ultimo_contacto
+        ci.ultimo_contacto,
+        COALESCE(wi.total_whatsapp, 0)::int                                     AS total_whatsapp,
+        wi.ultimo_whatsapp
       FROM clientes c
       INNER JOIN boletas b            ON b.cliente_id   = c.id
       INNER JOIN rifas   r            ON r.id           = b.rifa_id
@@ -313,6 +323,7 @@ const getSeguimientoClientes = async ({
       LEFT  JOIN usuarios u           ON u.id           = v.vendedor_id
       LEFT  JOIN notif_info ni        ON ni.cliente_id  = c.id
       LEFT  JOIN contacto_info ci     ON ci.cliente_id  = c.id
+      LEFT  JOIN whatsapp_info wi     ON wi.cliente_id  = c.id
       LEFT  JOIN LATERAL (
         SELECT COALESCE(SUM(a.monto) FILTER (WHERE a.estado = 'CONFIRMADO'), 0) AS total_abonado
         FROM abonos a WHERE a.boleta_id = b.id
@@ -371,6 +382,8 @@ const getSeguimientoClientes = async ({
       bb.ultima_notificacion,
       bb.total_contactos,
       bb.ultimo_contacto,
+      bb.total_whatsapp,
+      bb.ultimo_whatsapp,
       JSON_AGG(
         JSON_BUILD_OBJECT(
           'boleta_id',       bb.boleta_id,
@@ -394,7 +407,8 @@ const getSeguimientoClientes = async ({
       bb.cliente_id, bb.nombre, bb.telefono, bb.email,
       bb.identificacion, bb.cliente_created_at,
       bb.total_notificaciones, bb.ultima_notificacion,
-      bb.total_contactos, bb.ultimo_contacto
+      bb.total_contactos, bb.ultimo_contacto,
+      bb.total_whatsapp, bb.ultimo_whatsapp
     ORDER BY bb.cliente_created_at ASC
   
   `;
@@ -432,4 +446,22 @@ const registrarContactoSeguimiento = async ({ clienteId, registradoPor, nota }) 
   return res.rows[0];
 };
 
-module.exports = { getReporteRifa, getVentasGeneral, getSeguimientoClientes, registrarContactoSeguimiento };
+const registrarWhatsappSeguimiento = async ({ clienteId, registradoPor }) => {
+  const existe = await query('SELECT id FROM clientes WHERE id = $1', [clienteId]);
+  if (!existe.rows.length) throw new Error('Cliente no encontrado');
+
+  await query(
+    `INSERT INTO seguimiento_whatsapp (cliente_id, registrado_por)
+     VALUES ($1, $2)`,
+    [clienteId, registradoPor || null]
+  );
+
+  const res = await query(
+    `SELECT COUNT(*)::int AS total_whatsapp, MAX(created_at) AS ultimo_whatsapp
+     FROM seguimiento_whatsapp WHERE cliente_id = $1`,
+    [clienteId]
+  );
+  return res.rows[0];
+};
+
+module.exports = { getReporteRifa, getVentasGeneral, getSeguimientoClientes, registrarContactoSeguimiento, registrarWhatsappSeguimiento };

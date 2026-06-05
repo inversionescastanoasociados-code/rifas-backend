@@ -59,4 +59,12 @@ router.post(
   controller.registrarContactoSeguimiento
 );
 
+// Registrar envío WhatsApp desde seguimiento (estado independiente)
+router.post(
+  '/seguimiento-clientes/:clienteId/whatsapp',
+  authenticateToken,
+  authorize(['SUPER_ADMIN', 'ADMIN']),
+  controller.registrarWhatsappSeguimiento
+);
+
 module.exports = router;

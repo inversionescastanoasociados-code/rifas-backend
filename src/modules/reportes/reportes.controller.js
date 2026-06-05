@@ -203,6 +203,24 @@ const registrarContactoSeguimiento = async (req, res) => {
   }
 };
 
+const registrarWhatsappSeguimiento = async (req, res) => {
+  try {
+    const { clienteId } = req.params;
+    if (!UUID_REGEX.test(clienteId)) {
+      return res.status(400).json({ success: false, message: 'clienteId inválido' });
+    }
+    const registradoPor = req.user && req.user.id;
+    const data = await service.registrarWhatsappSeguimiento({ clienteId, registradoPor });
+    res.json({ success: true, ...data });
+  } catch (error) {
+    console.error('[REGISTRAR WHATSAPP SEGUIMIENTO ERROR]', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Error registrando WhatsApp'
+    });
+  }
+};
+
 module.exports = {
   getReporteRifa,
   getVentasGeneral,
@@ -210,4 +228,5 @@ module.exports = {
   getMisVentasGeneral,
   getSeguimientoClientes,
   registrarContactoSeguimiento,
+  registrarWhatsappSeguimiento,
 };
