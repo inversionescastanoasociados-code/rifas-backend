@@ -22,6 +22,8 @@ const verificarRoutes = require('./modules/verificar/verificar.routes');
 const ventasOnlineRoutes = require('./modules/ventas-online/ventas-online.routes');
 const recordatoriosRoutes = require('./modules/recordatorios/recordatorios.routes');
 const vendedoresRoutes = require('./modules/vendedores/vendedores.routes');
+const sistemaRoutes = require('./modules/sistema/sistema.routes');
+const { bloqueoPausa } = require('./middlewares/bloqueoPausa');
 
 const app = express();
 
@@ -39,6 +41,10 @@ app.use((req, res, next) => {
   logger.info(`${req.method} ${req.path} - ${req.ip}`);
   next();
 });
+
+// Bloqueo global cuando hay una rifa en pausa: ADMIN y VENDEDOR no pueden
+// realizar ninguna acción; SUPER_ADMIN mantiene acceso para reactivar.
+app.use(bloqueoPausa);
 
 app.get('/health', (req, res) => {
   res.json({
@@ -83,6 +89,7 @@ app.use('/api/ventas-online', ventasOnlineRoutes);
 app.use('/api/verificar', verificarRoutes);
 app.use('/api/recordatorios', recordatoriosRoutes);
 app.use('/api/vendedores-stats', vendedoresRoutes);
+app.use('/api/sistema', sistemaRoutes);
 
 // Servir imágenes: primero intenta filesystem, luego fallback a DB
 const { servirImagen } = require('./modules/uploads/uploads.controller');

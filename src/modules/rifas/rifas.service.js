@@ -5,6 +5,7 @@ const boletaService = require('../boletas/boletas.service');
 const logger = require('../../utils/logger');
 const crypto = require('crypto');
 const config = require('../../config/env');
+const { invalidarCachePausa } = require('../../utils/pausaSistema');
 
 class RifaService {
   async createRifa(rifaData) {
@@ -103,6 +104,12 @@ class RifaService {
 
       if (result.rows.length === 0) {
         throw new Error('Rifa not found');
+      }
+
+      // Si cambió el estado, invalidar la caché de pausa para que el bloqueo
+      // (o su reactivación) aplique de inmediato.
+      if (estado) {
+        invalidarCachePausa();
       }
 
       logger.info(`Rifa updated: ${id}`);
