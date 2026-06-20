@@ -54,9 +54,6 @@ class BoletaService {
 
   async getBoletasByRifa(rifa_id, estado = null) {
     try {
-      // 🔹 Lazy cleanup: liberar boletas expiradas
-      await this.liberarBoletasExpiradas();
-
       let result;
       if (estado) {
         result = await query(SQL_QUERIES.GET_BOLETAS_BY_RIFA_AND_STATUS, [rifa_id, estado]);
@@ -386,9 +383,6 @@ class BoletaService {
 
   async getAvailableBoletas(rifa_id) {
     try {
-      // 🔹 Lazy cleanup: liberar boletas expiradas
-      await this.liberarBoletasExpiradas();
-
       const result = await query(SQL_QUERIES.GET_AVAILABLE_BOLETAS, [rifa_id]);
       return result.rows;
     } catch (error) {
@@ -409,9 +403,6 @@ class BoletaService {
 
   async getBoletasFullStatus(rifa_id) {
     try {
-      // 🔹 Lazy cleanup: liberar boletas expiradas
-      await this.liberarBoletasExpiradas();
-
       const result = await query(SQL_QUERIES.GET_BOLETAS_FULL_STATUS, [rifa_id]);
       return result.rows;
     } catch (error) {
@@ -460,70 +451,18 @@ class BoletaService {
   }
 
   /**
-   * AUTOMATIZACIÓN: Liberar boletas con bloqueo expirado
-   * Se ejecuta automáticamente por job y lazy en cada lectura
-   * 
-   * Casos:
-   * 1. Bloqueo temporal - sin cliente: DISPONIBLE + limpiar tokens
-   * 2. Reserva formal - con cliente: DISPONIBLE + desvincular cliente y vendedor + limpiar tokens
+   * Liberación automática al vencer bloqueo_hasta: DESACTIVADA a pedido del negocio.
+   * bloqueo_hasta es solo referencia/aviso; las reservas no se sueltan solas.
+   * Para liberar: cancelar reserva, ventas admin o dashboard manual.
    */
   async liberarBoletasExpiradas() {
-    const tx = await beginTransaction();
-
-    try {
-      // 🔹 CASO 1: Bloqueos temporales sin cliente SIN CLIENTE
-      const boletasBloqueoSinCliente = await tx.query(
-        `UPDATE boletas
-         SET estado = 'DISPONIBLE',
-             reserva_token = NULL,
-             bloqueo_hasta = NULL,
-             updated_at = CURRENT_TIMESTAMP
-         WHERE bloqueo_hasta < CURRENT_TIMESTAMP
-           AND estado = 'RESERVADA'
-           AND cliente_id IS NULL
-         RETURNING id`
-      );
-
-      const liberadasSinCliente = boletasBloqueoSinCliente.rows.length;
-
-      logger.info(
-        `[AUTO] ${liberadasSinCliente} boletas bloqueadas liberadas (sin cliente)`
-      );
-
-      // 🔹 CASO 2: Reservas formales CON CLIENTE
-      const boletasReservaConCliente = await tx.query(
-        `UPDATE boletas
-         SET estado = 'DISPONIBLE',
-             cliente_id = NULL,
-             vendido_por = NULL,
-             reserva_token = NULL,
-             bloqueo_hasta = NULL,
-             updated_at = CURRENT_TIMESTAMP
-         WHERE bloqueo_hasta < CURRENT_TIMESTAMP
-           AND estado = 'RESERVADA'
-           AND cliente_id IS NOT NULL
-         RETURNING id, venta_id`
-      );
-
-      const liberadasConCliente = boletasReservaConCliente.rows.length;
-
-      logger.info(
-        `[AUTO] ${liberadasConCliente} reservas formales liberadas y desvinculadas`
-      );
-
-      await tx.commit();
-
-      return {
-        liberadas_bloqueos: liberadasSinCliente,
-        liberadas_reservas: liberadasConCliente,
-        total: liberadasSinCliente + liberadasConCliente,
-        timestamp: new Date().toISOString()
-      };
-    } catch (error) {
-      await tx.rollback();
-      logger.error('Error liberating expired boletas:', error);
-      throw error;
-    }
+    return {
+      liberadas_bloqueos: 0,
+      liberadas_reservas: 0,
+      total: 0,
+      timestamp: new Date().toISOString(),
+      auto_liberacion_desactivada: true
+    };
   }
 
   async updateBoletaNota(boletaId, nota) {

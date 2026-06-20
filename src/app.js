@@ -5,8 +5,6 @@ const config = require('./config/env');
 const logger = require('./utils/logger');
 const { errorHandler } = require('./middlewares/error');
 const { generalLimiter } = require('./middlewares/rateLimiter');
-const { startBoletaExpirationJob } = require('./jobs/boletaExpirationJob');
-
 const reportesRoutes = require('./modules/reportes/reportes.routes');
 const authRoutes = require('./modules/auth/auth.routes');
 const clientesRoutes = require('./modules/clientes/clientes.routes');
@@ -95,8 +93,8 @@ app.use('/api/sistema', sistemaRoutes);
 const { servirImagen } = require('./modules/uploads/uploads.controller');
 app.get('/storage/:filename', servirImagen);
 
-// 🔹 Iniciar job de liberación de boletas expiradas (cada 5 minutos)
-startBoletaExpirationJob(5 * 60 * 1000);
+// Liberación automática de reservas al vencer bloqueo_hasta: DESACTIVADA.
+// La fecha límite es solo informativa; liberar solo manual (cancelar reserva / admin).
 
 app.use('*', (req, res) => {
   res.status(404).json({

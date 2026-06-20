@@ -2,12 +2,9 @@ const boletaService = require('../modules/boletas/boletas.service');
 const logger = require('../utils/logger');
 
 /**
- * JOB: Liberar boletas con bloqueo expirado
- * Ejecuta cada 5 minutos automáticamente
- * 
- * Diferencia entre:
- * - Bloqueos simples (sin cliente): Se liberan a DISPONIBLE + limpiar tokens
- * - Reservas formales (con cliente): Se liberan a DISPONIBLE + desvincular cliente + limpiar tokens
+ * JOB: Liberar boletas con bloqueo expirado (NO montado en app.js).
+ * La liberación automática está desactivada: bloqueo_hasta es solo informativo.
+ * Este módulo se conserva por si se necesita invocar executeLiberation() manualmente.
  */
 
 let jobInterval = null;
