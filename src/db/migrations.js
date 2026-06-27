@@ -71,6 +71,19 @@ async function runMigrations() {
   } catch (error) {
     logger.warn('[Migrations] Error en migración 5:', error.message);
   }
+
+  // ── Migración 6: historial con usuario que realizó la acción ──
+  try {
+    const sqlPath6 = path.join(
+      __dirname,
+      '../../scripts/migrations/006_historial_usuario.sql'
+    );
+    const migrationSql6 = fs.readFileSync(sqlPath6, 'utf8');
+    await pool.query(migrationSql6);
+    logger.info('[Migrations] historial usuario/responsable verificado');
+  } catch (error) {
+    logger.warn('[Migrations] Error en migración 6:', error.message);
+  }
 }
 
 module.exports = { runMigrations };

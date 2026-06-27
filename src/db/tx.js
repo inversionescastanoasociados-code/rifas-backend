@@ -21,10 +21,22 @@ class Transaction {
   }
 }
 
-const beginTransaction = async () => {
+const beginTransaction = async (historialOptions = null) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    if (historialOptions?.origen) {
+      await client.query(
+        `SELECT set_config('app.historial_origen', $1, true)`,
+        [historialOptions.origen]
+      );
+    }
+    if (historialOptions?.usuarioId) {
+      await client.query(
+        `SELECT set_config('app.historial_usuario_id', $1, true)`,
+        [String(historialOptions.usuarioId)]
+      );
+    }
     return new Transaction(client);
   } catch (error) {
     client.release();

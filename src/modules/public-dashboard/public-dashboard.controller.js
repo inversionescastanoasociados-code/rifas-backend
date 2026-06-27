@@ -104,18 +104,14 @@ class PublicDashboardController {
   async confirmarPago(req, res) {
     try {
       const { abonoId } = req.params;
-      const { usuario_id } = req.user || {}; // Asumiendo que el usuario viene de JWT
-
       if (!abonoId) {
         return res.status(400).json({
           success: false,
           message: 'abonoId es requerido'
         });
       }
-
-      const resultado = await dashboardService.confirmarPago(abonoId, usuario_id);
-
-      logger.info(`Pago confirmado por usuario ${usuario_id}: ${resultado}`);
+      const confirmadoPor = req.user?.id || req.user?.usuario_id;
+      const resultado = await dashboardService.confirmarPago(abonoId, confirmadoPor);
 
       return res.json({
         success: true,
@@ -148,7 +144,7 @@ class PublicDashboardController {
         });
       }
 
-      const resultado = await dashboardService.cancelarVenta(ventaId, motivo);
+      const resultado = await dashboardService.cancelarVenta(ventaId, motivo, req.user?.id);
 
       return res.json({
         success: true,
@@ -289,7 +285,7 @@ class PublicDashboardController {
   async liberarBoleta(req, res) {
     try {
       const { boletaId } = req.params;
-      const resultado = await dashboardService.liberarBoletaManual(boletaId);
+      const resultado = await dashboardService.liberarBoletaManual(boletaId, req.user?.id);
       return res.json({
         success: true,
         message: `Boleta #${resultado.numero} liberada exitosamente`,
@@ -311,7 +307,7 @@ class PublicDashboardController {
   async liberarBoletasDeVenta(req, res) {
     try {
       const { ventaId } = req.params;
-      const resultado = await dashboardService.liberarBoletasDeVenta(ventaId);
+      const resultado = await dashboardService.liberarBoletasDeVenta(ventaId, req.user?.id);
       return res.json({
         success: true,
         message: `${resultado.boletas_liberadas} boletas liberadas exitosamente`,

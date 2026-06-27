@@ -187,7 +187,10 @@ class PublicDashboardService {
    * ✅ Confirmar pago de abono (manual)
    */
   async confirmarPago(abonoId, confirmadoPor) {
-    const tx = await beginTransaction();
+    const tx = await beginTransaction({
+      usuarioId: confirmadoPor,
+      origen: 'dashboard.confirmarPago',
+    });
 
     try {
       if (!abonoId) {
@@ -287,8 +290,11 @@ class PublicDashboardService {
   /**
    * ❌ Rechazar/Cancelar una venta pública
    */
-  async cancelarVenta(ventaId, motivoCancelacion) {
-    const tx = await beginTransaction();
+  async cancelarVenta(ventaId, motivoCancelacion, canceladoPor = null) {
+    const tx = await beginTransaction({
+      usuarioId: canceladoPor,
+      origen: 'dashboard.cancelarVenta',
+    });
 
     try {
       if (!ventaId) {
@@ -428,8 +434,11 @@ class PublicDashboardService {
   /**
    * 🔓 Liberar una boleta reservada manualmente
    */
-  async liberarBoletaManual(boletaId) {
-    const tx = await beginTransaction();
+  async liberarBoletaManual(boletaId, liberadoPor = null) {
+    const tx = await beginTransaction({
+      usuarioId: liberadoPor,
+      origen: 'dashboard.liberarBoletaManual',
+    });
     try {
       // Liberar la boleta
       const result = await tx.query(SQL_QUERIES.LIBERAR_BOLETA_MANUAL, [boletaId]);
@@ -459,8 +468,11 @@ class PublicDashboardService {
   /**
    * 🔓 Liberar TODAS las boletas de una venta y cancelar la venta
    */
-  async liberarBoletasDeVenta(ventaId) {
-    const tx = await beginTransaction();
+  async liberarBoletasDeVenta(ventaId, liberadoPor = null) {
+    const tx = await beginTransaction({
+      usuarioId: liberadoPor,
+      origen: 'dashboard.liberarBoletasDeVenta',
+    });
     try {
       // Liberar boletas
       const boletas = await tx.query(SQL_QUERIES.LIBERAR_BOLETAS_DE_VENTA, [ventaId]);

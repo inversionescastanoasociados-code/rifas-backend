@@ -80,7 +80,8 @@ class VentaController {
       const venta = await ventaService.convertirReservaEnVenta(id, {
         monto_total,
         total_pagado,
-        medio_pago_id
+        medio_pago_id,
+        convertida_por: req.user.id,
       });
 
       res.json({
@@ -123,7 +124,7 @@ class VentaController {
       const { id } = req.params;
       const { motivo } = req.body;
 
-      const resultado = await ventaService.cancelarReserva(id, motivo);
+      const resultado = await ventaService.cancelarReserva(id, motivo, req.user.id);
 
       res.json({
         success: true,

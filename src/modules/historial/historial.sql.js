@@ -23,11 +23,17 @@ const LISTAR_BASE = `
     c.identificacion AS cliente_identificacion,
     ca.nombre AS cliente_anterior_nombre,
     ca.identificacion AS cliente_anterior_identificacion,
-    u.nombre AS usuario_nombre
+    u.nombre AS usuario_nombre,
+    u.rol::text AS usuario_rol
   FROM historial_movimientos h
   LEFT JOIN clientes c ON c.id = h.cliente_id
   LEFT JOIN clientes ca ON ca.id = h.cliente_id_anterior
-  LEFT JOIN usuarios u ON u.id = h.usuario_id
+  LEFT JOIN usuarios u ON u.id = COALESCE(
+    h.usuario_id,
+    NULLIF(h.metadata->>'registrado_por', '')::uuid,
+    NULLIF(h.metadata->>'vendido_por_nuevo', '')::uuid,
+    NULLIF(h.metadata->>'vendido_por', '')::uuid
+  )
 `;
 
 const POR_BOLETA = `

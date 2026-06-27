@@ -16,7 +16,10 @@ class VentaService {
    * Boletas apuntan a venta.id (como abonos)
    */
   async crearReservaFormal(reservaData) {
-  const tx = await beginTransaction();
+  const tx = await beginTransaction({
+    usuarioId: reservaData.reservada_por,
+    origen: 'ventas.crearReservaFormal',
+  });
 
   try {
     const {
@@ -214,7 +217,10 @@ class VentaService {
    * y la convierte en venta real con pago
    */
   async convertirReservaEnVenta(ventaId, pagoData) {
-    const tx = await beginTransaction();
+    const tx = await beginTransaction({
+      usuarioId: pagoData.convertida_por,
+      origen: 'ventas.convertirReservaEnVenta',
+    });
 
     try {
       const { monto_total, total_pagado, medio_pago_id } = pagoData;
@@ -348,8 +354,11 @@ class VentaService {
    * CANCELAR RESERVA
    * Borra la venta (reserva) y libera todas las boletas
    */
-  async cancelarReserva(ventaId, motivoCancelacion) {
-    const tx = await beginTransaction();
+  async cancelarReserva(ventaId, motivoCancelacion, canceladaPor = null) {
+    const tx = await beginTransaction({
+      usuarioId: canceladaPor,
+      origen: 'ventas.cancelarReserva',
+    });
 
     try {
       // 🔹 1️⃣ Obtener la reserva
@@ -414,7 +423,10 @@ class VentaService {
   }
 
   async createVenta(ventaData) {
-    const tx = await beginTransaction();
+    const tx = await beginTransaction({
+      usuarioId: ventaData.vendida_por,
+      origen: 'ventas.createVenta',
+    });
 
     try {
       const {
@@ -800,7 +812,10 @@ class VentaService {
   }
 
   async completeVenta(id, actualizada_por) {
-    const tx = await beginTransaction();
+    const tx = await beginTransaction({
+      usuarioId: actualizada_por,
+      origen: 'ventas.completeVenta',
+    });
     
     try {
       const ventaResult = await tx.query(
@@ -838,7 +853,10 @@ class VentaService {
   }
 
   async cancelVenta(id, motivo, actualizada_por) {
-    const tx = await beginTransaction();
+    const tx = await beginTransaction({
+      usuarioId: actualizada_por,
+      origen: 'ventas.cancelVenta',
+    });
     
     try {
       const ventaResult = await tx.query(
@@ -877,7 +895,10 @@ class VentaService {
 
 
   async registrarAbonoVenta(ventaId, monto, medioPagoId, moneda, userId, notas, boletaId = null) {
-  const tx = await beginTransaction();
+  const tx = await beginTransaction({
+    usuarioId: userId,
+    origen: 'ventas.registrarAbonoVenta',
+  });
 
   try {
     // 1) Verificar que la venta existe
@@ -1074,7 +1095,10 @@ class VentaService {
 
 ///// ABONO MULTI-BOLETA (varias boletas en una sola transacción)
 async registrarAbonoMultiBoleta(ventaId, boletasAbono, medioPagoId, moneda, userId, notas) {
-  const tx = await beginTransaction();
+  const tx = await beginTransaction({
+    usuarioId: userId,
+    origen: 'ventas.registrarAbonoMultiBoleta',
+  });
 
   try {
     // 1) Verificar venta
@@ -1568,7 +1592,10 @@ async getVentasPorCliente(clienteId) {
   }
 
   async asignarGanador({ rifa_id, boleta_id, cliente, monto_abono, medio_pago_id, asignado_por }) {
-    const tx = await beginTransaction();
+    const tx = await beginTransaction({
+      usuarioId: asignado_por,
+      origen: 'ventas.asignarGanador',
+    });
     try {
       // Verificar que la boleta existe y está DISPONIBLE
       const boletaCheck = await tx.query(
