@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const { pool } = require('./pool');
 const logger = require('../utils/logger');
 
@@ -55,6 +57,19 @@ async function runMigrations() {
     logger.info('[Migrations] Tabla notificaciones_recordatorio creada/verificada');
   } catch (error) {
     logger.warn('[Migrations] Error en migración 4:', error.message);
+  }
+
+  // ── Migración 5: historial_movimientos (auditoría append-only) ──
+  try {
+    const sqlPath = path.join(
+      __dirname,
+      '../../scripts/migrations/005_historial_movimientos.sql'
+    );
+    const migrationSql = fs.readFileSync(sqlPath, 'utf8');
+    await pool.query(migrationSql);
+    logger.info('[Migrations] historial_movimientos y triggers verificados');
+  } catch (error) {
+    logger.warn('[Migrations] Error en migración 5:', error.message);
   }
 }
 
