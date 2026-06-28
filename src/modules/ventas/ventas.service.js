@@ -1511,16 +1511,49 @@ async getVentasPorCliente(clienteId) {
 }
 
   // ─── GANADORES ─────────────────────────────────────────────
-  async buscarBoletaGanador(numeroBoleta) {
+  _assertBoletaDisponibleParaGanador(estado, numero) {
+    const numFmt = String(numero).padStart(4, '0');
+    if (estado === 'DISPONIBLE') return;
+    if (estado === 'PAGADA') {
+      throw new Error(`La boleta #${numFmt} está PAGADA y no puede asignarse como ganador`);
+    }
+    if (estado === 'ABONADA') {
+      throw new Error(`La boleta #${numFmt} está ABONADA y no puede asignarse como ganador`);
+    }
+    if (estado === 'RESERVADA') {
+      throw new Error(`La boleta #${numFmt} está RESERVADA y no puede asignarse como ganador`);
+    }
+    throw new Error(`La boleta #${numFmt} no está disponible (estado: ${estado})`);
+  }
+
+  async getUsuariosGanador() {
+    const result = await query(`
+      SELECT id, nombre, rol::text AS rol
+      FROM usuarios
+      WHERE activo = true
+        AND rol IN ('SUPER_ADMIN', 'ADMIN', 'VENDEDOR')
+      ORDER BY nombre ASC
+    `);
+    return result.rows;
+  }
+
+  async buscarBoletaGanador(numeroBoleta, rifaId = null) {
+    const params = [numeroBoleta];
+    let rifaFilter = '';
+    if (rifaId) {
+      rifaFilter = ' AND b.rifa_id = $2';
+      params.push(rifaId);
+    }
+
     const boletaResult = await query(`
       SELECT b.id, b.numero, b.estado, b.venta_id, b.cliente_id, b.rifa_id,
              b.nota, b.bloqueo_hasta, b.imagen_url AS rifa_imagen_url,
              r.nombre AS rifa_nombre, r.precio_boleta
       FROM boletas b
       JOIN rifas r ON b.rifa_id = r.id
-      WHERE b.numero = $1
+      WHERE b.numero = $1${rifaFilter}
       ORDER BY b.created_at DESC LIMIT 1
-    `, [numeroBoleta]);
+    `, params);
 
     if (boletaResult.rows.length === 0) {
       return { encontrada: false, mensaje: 'Boleta no encontrada' };
@@ -1603,7 +1636,8 @@ async getVentasPorCliente(clienteId) {
         [boleta_id, rifa_id]
       );
       if (boletaCheck.rows.length === 0) throw new Error('Boleta no encontrada');
-      if (boletaCheck.rows[0].estado !== 'DISPONIBLE') throw new Error('La boleta ya no está disponible');
+      const boletaRow = boletaCheck.rows[0];
+      this._assertBoletaDisponibleParaGanador(boletaRow.estado, boletaRow.numero);
 
       const precioBoleta = await tx.query('SELECT precio_boleta FROM rifas WHERE id = $1', [rifa_id]);
       if (precioBoleta.rows.length === 0) throw new Error('Rifa no encontrada');
@@ -1671,6 +1705,142 @@ async getVentasPorCliente(clienteId) {
     } catch (error) {
       await tx.rollback();
       logger.error('Error asignando ganador:', error);
+      throw error;
+    }
+  }
+
+  async asignarGanadorDirecto({
+    rifa_id,
+    numero_boleta,
+    cliente,
+    medio_pago_id,
+    realizado_por,
+    fecha_venta,
+    asignado_por,
+  }) {
+    const tx = await beginTransaction({
+      usuarioId: asignado_por,
+      origen: 'ventas.asignarGanadorDirecto',
+    });
+
+    try {
+      const num = Number(numero_boleta);
+      if (!Number.isInteger(num) || num < 0) {
+        throw new Error('Número de boleta inválido');
+      }
+
+      const boletaCheck = await tx.query(
+        `SELECT id, estado, numero FROM boletas
+         WHERE numero = $1 AND rifa_id = $2
+         FOR UPDATE`,
+        [num, rifa_id]
+      );
+      if (boletaCheck.rows.length === 0) {
+        throw new Error(`Boleta #${String(num).padStart(4, '0')} no encontrada en esta rifa`);
+      }
+
+      const boletaRow = boletaCheck.rows[0];
+      this._assertBoletaDisponibleParaGanador(boletaRow.estado, boletaRow.numero);
+      const boleta_id = boletaRow.id;
+
+      const precioBoleta = await tx.query('SELECT precio_boleta FROM rifas WHERE id = $1', [rifa_id]);
+      if (precioBoleta.rows.length === 0) throw new Error('Rifa no encontrada');
+      const precio = Number(precioBoleta.rows[0].precio_boleta);
+
+      const usuarioCheck = await tx.query(
+        `SELECT id FROM usuarios WHERE id = $1 AND activo = true`,
+        [realizado_por]
+      );
+      if (usuarioCheck.rows.length === 0) {
+        throw new Error('El usuario seleccionado no es válido');
+      }
+
+      let fechaRegistro = new Date(fecha_venta);
+      if (Number.isNaN(fechaRegistro.getTime())) {
+        throw new Error('Fecha de venta inválida');
+      }
+
+      // Buscar o crear cliente
+      let clienteId;
+      if (cliente.identificacion && cliente.identificacion.trim()) {
+        const existing = await tx.query(
+          'SELECT id FROM clientes WHERE identificacion = $1 LIMIT 1',
+          [cliente.identificacion.trim()]
+        );
+        if (existing.rows.length > 0) {
+          clienteId = existing.rows[0].id;
+        }
+      }
+      if (!clienteId) {
+        const newCliente = await tx.query(
+          `INSERT INTO clientes (nombre, telefono, email, direccion, identificacion)
+           VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+          [
+            cliente.nombre,
+            cliente.telefono,
+            cliente.email || null,
+            cliente.direccion || null,
+            cliente.identificacion || null,
+          ]
+        );
+        clienteId = newCliente.rows[0].id;
+      }
+
+      const mpResult = await tx.query('SELECT nombre FROM medios_pago WHERE id = $1', [medio_pago_id]);
+      const gatewayNombre = mpResult.rows.length > 0 ? mpResult.rows[0].nombre : null;
+
+      const ventaResult = await tx.query(
+        `INSERT INTO ventas (
+           rifa_id, cliente_id, monto_total, abono_total, estado_venta,
+           medio_pago_id, vendedor_id, gateway_pago, es_venta_admin, created_at, updated_at
+         )
+         VALUES ($1,$2,$3,$4,'PAGADA',$5,$6,$7,true,$8,$8) RETURNING *`,
+        [rifa_id, clienteId, precio, precio, medio_pago_id, realizado_por, gatewayNombre, fechaRegistro]
+      );
+      const venta = ventaResult.rows[0];
+
+      await tx.query(
+        `UPDATE boletas
+         SET estado='PAGADA', cliente_id=$1, vendido_por=$2, venta_id=$3,
+             reserva_token=NULL, bloqueo_hasta=NULL, updated_at=$4
+         WHERE id=$5`,
+        [clienteId, realizado_por, venta.id, fechaRegistro, boleta_id]
+      );
+
+      await tx.query(
+        `INSERT INTO abonos (
+           venta_id, registrado_por, boleta_id, medio_pago_id, gateway_pago,
+           monto, moneda, estado, notas, created_at
+         )
+         VALUES ($1,$2,$3,$4,$5,$6,'COP','CONFIRMADO',$7,$8)`,
+        [
+          venta.id,
+          realizado_por,
+          boleta_id,
+          medio_pago_id,
+          gatewayNombre,
+          precio,
+          'Pago completo - Ganador (asignación directa)',
+          fechaRegistro,
+        ]
+      );
+
+      await tx.commit();
+
+      return {
+        venta_id: venta.id,
+        boleta_id,
+        boleta_numero: boletaRow.numero,
+        cliente_nombre: cliente.nombre,
+        monto_abono: precio,
+        estado_venta: 'PAGADA',
+        estado_boleta: 'PAGADA',
+        fecha_venta: fechaRegistro.toISOString(),
+        realizado_por,
+      };
+    } catch (error) {
+      await tx.rollback();
+      logger.error('Error asignando ganador directo:', error);
       throw error;
     }
   }

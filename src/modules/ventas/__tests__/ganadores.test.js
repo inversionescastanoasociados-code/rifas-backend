@@ -359,7 +359,7 @@ describe('POST /api/ventas/ganadores/asignar', () => {
       .set('Authorization', `Bearer ${superAdminToken}`);
 
     expect(res.status).toBe(400);
-    expect(res.body.message).toContain('no está disponible');
+    expect(res.body.message).toContain('PAGADA');
     expect(mockTx.rollback).toHaveBeenCalled();
   });
 

@@ -139,6 +139,13 @@ router.get(
 
 // 🔹 GANADORES — Solo SUPER_ADMIN
 router.get(
+  '/ganadores/usuarios',
+  authenticateToken,
+  authorize(['SUPER_ADMIN']),
+  ventaController.getUsuariosGanador
+);
+
+router.get(
   '/ganadores/buscar-boleta',
   authenticateToken,
   authorize(['SUPER_ADMIN']),
@@ -163,6 +170,27 @@ router.post(
     medio_pago_id: Joi.string().uuid().required()
   })),
   ventaController.asignarGanador
+);
+
+router.post(
+  '/ganadores/asignar-directo',
+  authenticateToken,
+  authorize(['SUPER_ADMIN']),
+  validate(Joi.object({
+    rifa_id: Joi.string().uuid().required(),
+    numero_boleta: Joi.number().integer().min(0).max(9999).required(),
+    cliente: Joi.object({
+      nombre: Joi.string().required().max(200),
+      telefono: Joi.string().required().max(20),
+      email: Joi.string().email().optional().allow('', null),
+      direccion: Joi.string().optional().allow('', null),
+      identificacion: Joi.string().optional().allow('', null),
+    }).required(),
+    medio_pago_id: Joi.string().uuid().required(),
+    realizado_por: Joi.string().uuid().required(),
+    fecha_venta: Joi.date().iso().required(),
+  })),
+  ventaController.asignarGanadorDirecto
 );
 
 router.get('/', 
