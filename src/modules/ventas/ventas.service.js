@@ -1820,7 +1820,7 @@ async getVentasPorCliente(clienteId) {
           medio_pago_id,
           gatewayNombre,
           precio,
-          'Pago completo - Ganador (asignación directa)',
+          null,
           fechaRegistro,
         ]
       );
