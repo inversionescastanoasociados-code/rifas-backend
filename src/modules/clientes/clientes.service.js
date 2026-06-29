@@ -380,6 +380,101 @@ class ClienteService {
     }
   }
 
+  async buscarClientesSimilares({ q, limit = 8, rifaIdActual = null }) {
+    try {
+      const searchTerm = (q || '').trim();
+      if (searchTerm.length < 3) {
+        return [];
+      }
+
+      const likePattern = `%${searchTerm}%`;
+      const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 8, 1), 15);
+
+      const selectQuery = `
+        WITH matched AS (
+          SELECT
+            c.id,
+            c.nombre,
+            c.telefono,
+            c.identificacion,
+            c.email,
+            GREATEST(
+              word_similarity($1, c.nombre),
+              CASE WHEN c.nombre ILIKE $2 THEN 0.4 ELSE 0 END,
+              CASE WHEN c.identificacion ILIKE $2 THEN 0.6 ELSE 0 END
+            ) AS score
+          FROM clientes c
+          WHERE c.nombre ILIKE $2
+             OR c.identificacion ILIKE $2
+             OR word_similarity($1, c.nombre) > 0.3
+          ORDER BY score DESC, c.nombre ASC
+          LIMIT $3
+        )
+        SELECT
+          m.id,
+          m.nombre,
+          m.telefono,
+          m.identificacion,
+          m.email,
+          m.score,
+          COALESCE(
+            (
+              SELECT json_agg(row_to_json(bx) ORDER BY bx.orden, bx.rifa_nombre, bx.numero)
+              FROM (
+                SELECT
+                  b.numero,
+                  b.estado,
+                  r.nombre AS rifa_nombre,
+                  r.estado AS rifa_estado,
+                  r.id AS rifa_id,
+                  CASE
+                    WHEN r.estado = 'TERMINADA' THEN 0
+                    WHEN $4::uuid IS NOT NULL AND r.id = $4::uuid THEN 2
+                    ELSE 1
+                  END AS orden
+                FROM boletas b
+                JOIN rifas r ON r.id = b.rifa_id
+                WHERE b.cliente_id = m.id
+                  AND b.estado != 'DISPONIBLE'
+                ORDER BY
+                  CASE
+                    WHEN r.estado = 'TERMINADA' THEN 0
+                    WHEN $4::uuid IS NOT NULL AND r.id = $4::uuid THEN 2
+                    ELSE 1
+                  END,
+                  r.created_at DESC,
+                  b.numero
+                LIMIT 6
+              ) bx
+            ),
+            '[]'::json
+          ) AS boletas
+        FROM matched m
+        ORDER BY m.score DESC, m.nombre ASC
+      `;
+
+      const result = await query(selectQuery, [
+        searchTerm,
+        likePattern,
+        safeLimit,
+        rifaIdActual
+      ]);
+
+      return result.rows.map((row) => ({
+        id: row.id,
+        nombre: row.nombre,
+        telefono: row.telefono,
+        identificacion: row.identificacion,
+        email: row.email,
+        score: parseFloat(row.score),
+        boletas: row.boletas || []
+      }));
+    } catch (error) {
+      logger.error('Error in buscarClientesSimilares service:', error);
+      throw error;
+    }
+  }
+
   async getNextIdentificacion() {
     try {
       const result = await query(`

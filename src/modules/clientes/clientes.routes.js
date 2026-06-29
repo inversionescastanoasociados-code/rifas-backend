@@ -39,6 +39,12 @@ const querySchema = Joi.object({
   search: Joi.string().optional().max(100).trim()
 });
 
+const similaresQuerySchema = Joi.object({
+  q: Joi.string().required().min(3).max(100).trim(),
+  limit: Joi.number().integer().min(1).max(15).default(8),
+  rifa_id: Joi.string().uuid().optional()
+});
+
 // POST /api/clientes - Crear cliente
 router.post('/', 
   authenticateToken, 
@@ -53,6 +59,14 @@ router.get('/',
   authorize(['SUPER_ADMIN', 'ADMIN', 'VENDEDOR']), 
   validate(querySchema, 'query'), 
   clienteController.getAllClientes
+);
+
+// GET /api/clientes/similares - Buscar clientes similares al crear uno nuevo
+router.get('/similares',
+  authenticateToken,
+  authorize(['SUPER_ADMIN', 'ADMIN', 'VENDEDOR']),
+  validate(similaresQuerySchema, 'query'),
+  clienteController.buscarClientesSimilares
 );
 
 // GET /api/clientes/next-identificacion - Generar siguiente identificación secuencial

@@ -189,6 +189,30 @@ class ClienteController {
     }
   }
 
+  async buscarClientesSimilares(req, res) {
+    try {
+      const { q, limit, rifa_id: rifaIdActual } = req.query;
+
+      const clientes = await clienteService.buscarClientesSimilares({
+        q,
+        limit,
+        rifaIdActual: rifaIdActual || null
+      });
+
+      res.status(200).json({
+        success: true,
+        data: clientes
+      });
+    } catch (error) {
+      logger.error('Error in buscarClientesSimilares controller:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error buscando clientes similares',
+        error: error.message
+      });
+    }
+  }
+
   async getNextIdentificacion(req, res) {
     try {
       const nextIdentificacion = await clienteService.getNextIdentificacion();
