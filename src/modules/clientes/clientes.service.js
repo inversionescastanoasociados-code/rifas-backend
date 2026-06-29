@@ -1,6 +1,53 @@
 const { query } = require('../../db/pool');
 const logger = require('../../utils/logger');
 
+function buildResumenPagoBoleta({
+  estado,
+  es_actual,
+  fue_liberada,
+  total_abonado,
+  precio_boleta,
+  estado_venta
+}) {
+  const abonado = parseFloat(total_abonado) || 0;
+  const precio = parseFloat(precio_boleta) || 0;
+
+  if (estado === 'PAGADA' || estado_venta === 'PAGADA') {
+    return 'Pagó completo';
+  }
+
+  if (es_actual) {
+    if (estado === 'ABONADA' || (estado === 'RESERVADA' && abonado > 0)) {
+      if (precio > 0 && abonado >= precio) {
+        return 'Pagó completo';
+      }
+      return `Abonó $${Math.round(abonado).toLocaleString('es-CO')} (saldo pendiente)`;
+    }
+    if (estado === 'RESERVADA') {
+      return 'Reservada sin pago';
+    }
+    if (estado === 'ANULADA') {
+      return 'Anulada';
+    }
+  }
+
+  if (fue_liberada) {
+    if (abonado > 0) {
+      return `Abonó $${Math.round(abonado).toLocaleString('es-CO')} y quedó liberada`;
+    }
+    if (estado === 'RESERVADA' || estado_venta === 'PENDIENTE' || estado_venta === 'EXPIRADA') {
+      return 'Reservó y no pagó (liberada)';
+    }
+    return `Tuvo boleta ${estado || 'asignada'} (liberada)`;
+  }
+
+  if (abonado > 0) {
+    return `Abonó $${Math.round(abonado).toLocaleString('es-CO')}`;
+  }
+
+  return estado ? `Estado: ${estado}` : 'Participó en rifa';
+}
+
 class ClienteService {
   async createCliente(clienteData) {
     try {
@@ -419,33 +466,193 @@ class ClienteService {
           m.score,
           COALESCE(
             (
-              SELECT json_agg(row_to_json(bx) ORDER BY bx.orden, bx.rifa_nombre, bx.numero)
+              SELECT json_agg(limited ORDER BY limited.orden, limited.rifa_nombre, limited.numero)
               FROM (
-                SELECT
-                  b.numero,
-                  b.estado,
-                  r.nombre AS rifa_nombre,
-                  r.estado AS rifa_estado,
-                  r.id AS rifa_id,
-                  CASE
-                    WHEN r.estado = 'TERMINADA' THEN 0
-                    WHEN $4::uuid IS NOT NULL AND r.id = $4::uuid THEN 2
-                    ELSE 1
-                  END AS orden
-                FROM boletas b
-                JOIN rifas r ON r.id = b.rifa_id
-                WHERE b.cliente_id = m.id
-                  AND b.estado != 'DISPONIBLE'
-                ORDER BY
-                  CASE
-                    WHEN r.estado = 'TERMINADA' THEN 0
-                    WHEN $4::uuid IS NOT NULL AND r.id = $4::uuid THEN 2
-                    ELSE 1
-                  END,
-                  r.created_at DESC,
-                  b.numero
-                LIMIT 6
-              ) bx
+                SELECT *
+                FROM (
+                  SELECT DISTINCT ON (u.rifa_id, u.numero)
+                    u.numero,
+                    u.estado,
+                    u.rifa_nombre,
+                    u.rifa_estado,
+                    u.rifa_id,
+                    u.es_actual,
+                    u.fue_liberada,
+                    u.total_abonado,
+                    u.estado_venta,
+                    u.precio_boleta,
+                    u.orden
+                  FROM (
+                  SELECT
+                    b.numero,
+                    b.estado::text AS estado,
+                    r.nombre AS rifa_nombre,
+                    r.estado::text AS rifa_estado,
+                    r.id AS rifa_id,
+                    true AS es_actual,
+                    false AS fue_liberada,
+                    COALESCE(ab.total_abonado, 0) AS total_abonado,
+                    v.estado_venta::text AS estado_venta,
+                    r.precio_boleta,
+                    1 AS prioridad,
+                    CASE
+                      WHEN r.estado = 'TERMINADA' THEN 0
+                      WHEN $4::uuid IS NOT NULL AND r.id = $4::uuid THEN 2
+                      ELSE 1
+                    END AS orden
+                  FROM boletas b
+                  JOIN rifas r ON r.id = b.rifa_id
+                  LEFT JOIN ventas v ON v.id = b.venta_id
+                  LEFT JOIN LATERAL (
+                    SELECT COALESCE(SUM(a.monto) FILTER (WHERE a.estado = 'CONFIRMADO'), 0) AS total_abonado
+                    FROM abonos a
+                    WHERE a.boleta_id = b.id
+                  ) ab ON true
+                  WHERE b.cliente_id = m.id
+                    AND b.estado != 'DISPONIBLE'
+
+                  UNION ALL
+
+                  SELECT
+                    ha.numero,
+                    COALESCE(ha.estado_al_liberar, ha.ultimo_estado, 'DESCONOCIDO') AS estado,
+                    r.nombre AS rifa_nombre,
+                    r.estado::text AS rifa_estado,
+                    r.id AS rifa_id,
+                    false AS es_actual,
+                    ha.fue_liberada,
+                    GREATEST(
+                      COALESCE(ha.total_abonado_hist, 0),
+                      COALESCE(ha.total_abonado_venta, 0)
+                    ) AS total_abonado,
+                    ha.estado_venta,
+                    r.precio_boleta,
+                    2 AS prioridad,
+                    CASE
+                      WHEN r.estado = 'TERMINADA' THEN 0
+                      WHEN $4::uuid IS NOT NULL AND r.id = $4::uuid THEN 2
+                      ELSE 1
+                    END AS orden
+                  FROM (
+                    SELECT
+                      h.rifa_id,
+                      h.numero,
+                      (
+                        SELECT h2.estado_anterior
+                        FROM historial_movimientos h2
+                        WHERE (h2.cliente_id = m.id OR h2.cliente_id_anterior = m.id)
+                          AND h2.rifa_id = h.rifa_id
+                          AND h2.numero = h.numero
+                          AND h2.accion IN ('LIBERAR_CLIENTE', 'LIBERAR_BOLETA')
+                        ORDER BY h2.created_at DESC
+                        LIMIT 1
+                      ) AS estado_al_liberar,
+                      (
+                        SELECT h2.estado_nuevo
+                        FROM historial_movimientos h2
+                        WHERE (h2.cliente_id = m.id OR h2.cliente_id_anterior = m.id)
+                          AND h2.rifa_id = h.rifa_id
+                          AND h2.numero = h.numero
+                          AND h2.entidad = 'BOLETA'
+                          AND h2.estado_nuevo IS NOT NULL
+                          AND h2.estado_nuevo <> 'DISPONIBLE'
+                        ORDER BY h2.created_at DESC
+                        LIMIT 1
+                      ) AS ultimo_estado,
+                      EXISTS (
+                        SELECT 1
+                        FROM historial_movimientos h2
+                        WHERE (h2.cliente_id = m.id OR h2.cliente_id_anterior = m.id)
+                          AND h2.rifa_id = h.rifa_id
+                          AND h2.numero = h.numero
+                          AND h2.accion IN ('LIBERAR_CLIENTE', 'LIBERAR_BOLETA')
+                      ) AS fue_liberada,
+                      (
+                        SELECT COALESCE(SUM(h2.monto), 0)
+                        FROM historial_movimientos h2
+                        WHERE h2.cliente_id = m.id
+                          AND h2.rifa_id = h.rifa_id
+                          AND h2.numero = h.numero
+                          AND h2.entidad = 'ABONO'
+                          AND h2.accion IN ('ABONO_CONFIRMADO', 'ABONO_REGISTRADO')
+                      ) AS total_abonado_hist,
+                      (
+                        SELECT COALESCE(SUM(a.monto), 0)
+                        FROM abonos a
+                        JOIN ventas v ON v.id = a.venta_id
+                        JOIN boletas bx ON bx.id = a.boleta_id
+                        WHERE v.cliente_id = m.id
+                          AND bx.rifa_id = h.rifa_id
+                          AND bx.numero = h.numero
+                          AND a.estado = 'CONFIRMADO'
+                      ) AS total_abonado_venta,
+                      (
+                        SELECT v.estado_venta::text
+                        FROM historial_movimientos h2
+                        JOIN ventas v ON v.id = h2.venta_id
+                        WHERE (h2.cliente_id = m.id OR h2.cliente_id_anterior = m.id)
+                          AND h2.rifa_id = h.rifa_id
+                          AND h2.numero = h.numero
+                          AND h2.venta_id IS NOT NULL
+                        ORDER BY h2.created_at DESC
+                        LIMIT 1
+                      ) AS estado_venta
+                    FROM historial_movimientos h
+                    WHERE (h.cliente_id = m.id OR h.cliente_id_anterior = m.id)
+                      AND h.rifa_id IS NOT NULL
+                      AND h.numero IS NOT NULL
+                    GROUP BY h.rifa_id, h.numero
+                  ) ha
+                  JOIN rifas r ON r.id = ha.rifa_id
+
+                  UNION ALL
+
+                  SELECT
+                    b.numero,
+                    CASE
+                      WHEN b.estado = 'PAGADA' THEN 'PAGADA'
+                      WHEN v.estado_venta = 'PAGADA' THEN 'PAGADA'
+                      WHEN b.estado = 'ABONADA' OR v.estado_venta = 'ABONADA' THEN 'ABONADA'
+                      WHEN b.estado = 'ANULADA' THEN 'ANULADA'
+                      ELSE 'RESERVADA'
+                    END AS estado,
+                    r.nombre AS rifa_nombre,
+                    r.estado::text AS rifa_estado,
+                    r.id AS rifa_id,
+                    false AS es_actual,
+                    (b.estado = 'DISPONIBLE' AND b.cliente_id IS NULL) AS fue_liberada,
+                    GREATEST(
+                      COALESCE(v.abono_total, 0),
+                      COALESCE(vd.abono, 0),
+                      COALESCE(ab.total_abonado, 0)
+                    ) AS total_abonado,
+                    v.estado_venta::text AS estado_venta,
+                    r.precio_boleta,
+                    3 AS prioridad,
+                    CASE
+                      WHEN r.estado = 'TERMINADA' THEN 0
+                      WHEN $4::uuid IS NOT NULL AND r.id = $4::uuid THEN 2
+                      ELSE 1
+                    END AS orden
+                  FROM ventas v
+                  JOIN rifas r ON r.id = v.rifa_id
+                  LEFT JOIN venta_detalles vd ON vd.venta_id = v.id
+                  LEFT JOIN boletas b ON b.id = COALESCE(vd.boleta_id, (
+                    SELECT b2.id FROM boletas b2 WHERE b2.venta_id = v.id ORDER BY b2.numero LIMIT 1
+                  ))
+                  LEFT JOIN LATERAL (
+                    SELECT COALESCE(SUM(a.monto) FILTER (WHERE a.estado = 'CONFIRMADO'), 0) AS total_abonado
+                    FROM abonos a
+                    WHERE a.venta_id = v.id
+                  ) ab ON true
+                  WHERE v.cliente_id = m.id
+                    AND b.id IS NOT NULL
+                ) u
+                ORDER BY u.rifa_id, u.numero, u.prioridad ASC
+                ) deduped
+                ORDER BY deduped.orden, deduped.rifa_nombre, deduped.numero
+                LIMIT 8
+              ) limited
             ),
             '[]'::json
           ) AS boletas
@@ -467,7 +674,25 @@ class ClienteService {
         identificacion: row.identificacion,
         email: row.email,
         score: parseFloat(row.score),
-        boletas: row.boletas || []
+        boletas: (row.boletas || []).map((boleta) => ({
+          numero: boleta.numero,
+          estado: boleta.estado,
+          rifa_nombre: boleta.rifa_nombre,
+          rifa_estado: boleta.rifa_estado,
+          rifa_id: boleta.rifa_id,
+          es_actual: Boolean(boleta.es_actual),
+          fue_liberada: Boolean(boleta.fue_liberada),
+          total_abonado: parseFloat(boleta.total_abonado) || 0,
+          estado_venta: boleta.estado_venta || null,
+          resumen_pago: buildResumenPagoBoleta({
+            estado: boleta.estado,
+            es_actual: Boolean(boleta.es_actual),
+            fue_liberada: Boolean(boleta.fue_liberada),
+            total_abonado: boleta.total_abonado,
+            precio_boleta: boleta.precio_boleta,
+            estado_venta: boleta.estado_venta
+          })
+        }))
       }));
     } catch (error) {
       logger.error('Error in buscarClientesSimilares service:', error);
