@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const clienteController = require('./clientes.controller');
 const { authenticateToken, authorize } = require('../../middlewares/auth');
-const { validate, validateParams } = require('../../middlewares/validate');
+const { validate, validateParams, validateQuery } = require('../../middlewares/validate');
 const Joi = require('joi');
 
 const createClienteSchema = Joi.object({
@@ -57,7 +57,7 @@ router.post('/',
 router.get('/', 
   authenticateToken, 
   authorize(['SUPER_ADMIN', 'ADMIN', 'VENDEDOR']), 
-  validate(querySchema, 'query'), 
+  validateQuery(querySchema),
   clienteController.getAllClientes
 );
 
@@ -65,7 +65,7 @@ router.get('/',
 router.get('/similares',
   authenticateToken,
   authorize(['SUPER_ADMIN', 'ADMIN', 'VENDEDOR']),
-  validate(similaresQuerySchema, 'query'),
+  validateQuery(similaresQuerySchema),
   clienteController.buscarClientesSimilares
 );
 
