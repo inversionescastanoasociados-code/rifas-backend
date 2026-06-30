@@ -118,6 +118,7 @@ class ClienteController {
       res.status(200).json({
         success: true,
         data: result.clientes,
+        rifa_actual: result.rifa_actual,
         pagination: {
           page: result.page,
           limit: result.limit,

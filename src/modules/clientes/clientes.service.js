@@ -48,6 +48,41 @@ function buildResumenPagoBoleta({
   return estado ? `Estado: ${estado}` : 'Participó en rifa';
 }
 
+function buildResumenFromRifas(rifasList) {
+  let totalPagado = 0;
+
+  const resumen = rifasList.reduce((acc, rifa) => {
+    acc.total_boletas += rifa.resumen.total;
+    acc.pagadas += rifa.resumen.pagadas;
+    acc.reservadas += rifa.resumen.reservadas;
+    acc.abonadas += rifa.resumen.abonadas;
+    acc.anuladas += rifa.resumen.anuladas;
+    acc.total_deuda += rifa.resumen.deuda;
+    acc.total_abonado += rifa.resumen.abonado;
+    return acc;
+  }, {
+    total_boletas: 0,
+    pagadas: 0,
+    reservadas: 0,
+    abonadas: 0,
+    anuladas: 0,
+    total_deuda: 0,
+    total_abonado: 0,
+    total_pagado: 0
+  });
+
+  rifasList.forEach((rifa) => {
+    rifa.boletas.forEach((b) => {
+      if (b.estado === 'PAGADA') {
+        totalPagado += b.precio_unitario;
+      }
+    });
+  });
+
+  resumen.total_pagado = totalPagado;
+  return resumen;
+}
+
 class ClienteService {
   async createCliente(clienteData) {
     try {
@@ -239,6 +274,8 @@ class ClienteService {
             FROM abonos a WHERE a.boleta_id = b.id
           ) ab ON true
           WHERE b.cliente_id = c.id
+            AND r.estado = 'ACTIVA'
+            AND b.estado != 'DISPONIBLE'
         ) bs ON true
         ${whereClause}
         ORDER BY c.created_at DESC
@@ -246,12 +283,21 @@ class ClienteService {
       `;
       
       const result = await query(selectQuery, queryParams);
+
+      const rifaActualResult = await query(`
+        SELECT id, nombre, estado
+        FROM rifas
+        WHERE estado = 'ACTIVA'
+        ORDER BY created_at DESC
+        LIMIT 1
+      `);
       
       return {
         clientes: result.rows,
         total,
         page,
-        limit
+        limit,
+        rifa_actual: rifaActualResult.rows[0] || null
       };
       
     } catch (error) {
@@ -340,24 +386,10 @@ class ClienteService {
         LIMIT 50
       `, [id]);
 
-      // 5. Build summary with real financial data from abonos
+      // 5. Group boletas by rifa
       const boletas = boletasResult.rows;
-      const totalBoletas = boletas.length;
-      const boletasPagadas = boletas.filter(b => b.estado === 'PAGADA').length;
-      const boletasReservadas = boletas.filter(b => b.estado === 'RESERVADA').length;
-      const boletasAbonadas = boletas.filter(b => b.estado === 'ABONADA').length;
-      const boletasAnuladas = boletas.filter(b => b.estado === 'ANULADA').length;
+      const getBoletaPrecio = (b) => parseFloat(b.precio_boleta);
 
-      // Always use the rifa's canonical precio_boleta (not monto_total/boletas which can be wrong)
-      const getBoletaPrecio = (b) => {
-        return parseFloat(b.precio_boleta);
-      };
-
-      let totalDeuda = 0;
-      let totalAbonado = 0;
-      let totalPagado = 0;
-
-      // 6. Group boletas by rifa
       const rifasMap = {};
       boletas.forEach(b => {
         const precio = getBoletaPrecio(b);
@@ -392,32 +424,33 @@ class ClienteService {
         if (b.estado === 'RESERVADA') rifa.resumen.reservadas++;
         if (b.estado === 'ABONADA') rifa.resumen.abonadas++;
         if (b.estado === 'ANULADA') rifa.resumen.anuladas++;
-        
-        // Financial totals
+
         if (b.estado === 'PAGADA') {
-          totalPagado += precio;
-          rifa.resumen.abonado += precio; // pagada = fully paid
+          rifa.resumen.abonado += precio;
         } else if (['RESERVADA', 'ABONADA'].includes(b.estado)) {
-          totalDeuda += saldo;
-          totalAbonado += abonado;
           rifa.resumen.deuda += saldo;
           rifa.resumen.abonado += abonado;
         }
       });
 
+      const allRifas = Object.values(rifasMap);
+      const rifasActuales = allRifas.filter((r) => r.rifa_estado === 'ACTIVA');
+      const rifasPasadas = allRifas.filter((r) => r.rifa_estado !== 'ACTIVA');
+      const rifaActual = rifasActuales[0] || null;
+
       return {
         cliente,
-        resumen: {
-          total_boletas: totalBoletas,
-          pagadas: boletasPagadas,
-          reservadas: boletasReservadas,
-          abonadas: boletasAbonadas,
-          anuladas: boletasAnuladas,
-          total_deuda: totalDeuda,
-          total_abonado: totalAbonado,
-          total_pagado: totalPagado
-        },
-        rifas: Object.values(rifasMap),
+        rifa_actual: rifaActual
+          ? {
+              id: rifaActual.rifa_id,
+              nombre: rifaActual.rifa_nombre,
+              estado: rifaActual.rifa_estado
+            }
+          : null,
+        resumen: buildResumenFromRifas(rifasActuales),
+        rifas: rifasActuales,
+        resumen_pasadas: buildResumenFromRifas(rifasPasadas),
+        rifas_pasadas: rifasPasadas,
         abonos: abonosResult.rows
       };
 
