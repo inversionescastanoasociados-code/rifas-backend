@@ -36,7 +36,10 @@ const cedulaSchema = Joi.object({
 const querySchema = Joi.object({
   page: Joi.number().integer().min(1).default(1),
   limit: Joi.number().integer().min(1).max(100).default(10),
-  search: Joi.string().optional().max(100).trim()
+  search: Joi.string().optional().max(100).trim(),
+  filtro: Joi.string()
+    .valid('todos', 'con_boletas', 'pagadas', 'reservadas', 'abonadas')
+    .default('todos')
 });
 
 const similaresQuerySchema = Joi.object({

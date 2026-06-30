@@ -107,18 +107,20 @@ class ClienteController {
 
   async getAllClientes(req, res) {
     try {
-      const { page = 1, limit = 10, search } = req.query;
+      const { page = 1, limit = 10, search, filtro = 'todos' } = req.query;
       
       const result = await clienteService.getAllClientes({
         page: parseInt(page),
         limit: parseInt(limit),
-        search
+        search,
+        filtro
       });
       
       res.status(200).json({
         success: true,
         data: result.clientes,
         rifa_actual: result.rifa_actual,
+        resumen_filtros: result.resumen_filtros,
         pagination: {
           page: result.page,
           limit: result.limit,

@@ -1,6 +1,88 @@
 const { query } = require('../../db/pool');
 const logger = require('../../utils/logger');
 
+const BOLETA_STATS_LATERAL = `
+  LEFT JOIN LATERAL (
+    SELECT
+      COUNT(*) AS total_boletas,
+      COUNT(*) FILTER (WHERE b.estado = 'PAGADA') AS pagadas,
+      COUNT(*) FILTER (WHERE b.estado = 'RESERVADA') AS reservadas,
+      COUNT(*) FILTER (WHERE b.estado = 'ABONADA') AS abonadas,
+      COALESCE(SUM(
+        CASE WHEN b.estado IN ('RESERVADA','ABONADA') THEN
+          GREATEST(
+            r.precio_boleta
+            - COALESCE(ab.total_abonado, 0),
+            0
+          )
+        ELSE 0 END
+      ), 0) AS deuda_total
+    FROM boletas b
+    JOIN rifas r ON b.rifa_id = r.id
+    LEFT JOIN ventas v ON b.venta_id = v.id
+    LEFT JOIN LATERAL (
+      SELECT COUNT(*) AS cnt FROM boletas WHERE venta_id = v.id
+    ) bc ON true
+    LEFT JOIN LATERAL (
+      SELECT COALESCE(SUM(a.monto) FILTER (WHERE a.estado = 'CONFIRMADO'), 0) AS total_abonado
+      FROM abonos a WHERE a.boleta_id = b.id
+    ) ab ON true
+    WHERE b.cliente_id = c.id
+      AND r.estado = 'ACTIVA'
+      AND b.estado != 'DISPONIBLE'
+  ) bs ON true
+`;
+
+function buildClientesSearchClause(search, queryParams) {
+  if (!search) {
+    return { clause: '', params: queryParams, paramCount: queryParams.length };
+  }
+
+  const paramCount = queryParams.length + 1;
+  const clause = `
+    (c.nombre ILIKE $${paramCount}
+     OR c.email ILIKE $${paramCount}
+     OR c.telefono ILIKE $${paramCount}
+     OR c.identificacion ILIKE $${paramCount})
+  `;
+  queryParams.push(`%${search}%`);
+
+  return { clause, params: queryParams, paramCount };
+}
+
+function getFiltroBoletasCondition(filtro) {
+  switch (filtro) {
+    case 'con_boletas':
+      return 'COALESCE(bs.total_boletas, 0) > 0';
+    case 'pagadas':
+      return 'COALESCE(bs.pagadas, 0) > 0';
+    case 'reservadas':
+      return 'COALESCE(bs.reservadas, 0) > 0';
+    case 'abonadas':
+      return 'COALESCE(bs.abonadas, 0) > 0';
+    default:
+      return null;
+  }
+}
+
+function buildClientesWhereClause(search, filtro, queryParams) {
+  const conditions = [];
+  const searchResult = buildClientesSearchClause(search, queryParams);
+  if (searchResult.clause) {
+    conditions.push(searchResult.clause);
+  }
+
+  const filtroCondition = getFiltroBoletasCondition(filtro);
+  if (filtroCondition) {
+    conditions.push(filtroCondition);
+  }
+
+  return {
+    whereClause: conditions.length ? `WHERE ${conditions.join(' AND ')}` : '',
+    queryParams: searchResult.params
+  };
+}
+
 function buildResumenPagoBoleta({
   estado,
   es_actual,
@@ -205,42 +287,50 @@ class ClienteService {
     }
   }
 
-  async getAllClientes({ page, limit, search }) {
+  async getAllClientes({ page, limit, search, filtro = 'todos' }) {
     try {
-      let whereClause = '';
-      let queryParams = [];
-      let paramCount = 0;
-      
-      // Búsqueda por nombre o email
-      if (search) {
-        paramCount++;
-        whereClause = `
-    WHERE c.nombre ILIKE $${paramCount}
-       OR c.email ILIKE $${paramCount}
-       OR c.telefono ILIKE $${paramCount}
-       OR c.identificacion ILIKE $${paramCount}
-  `;
-        queryParams.push(`%${search}%`);
-      }
-      
-      // Contar total
+      const filtroActivo = filtro && filtro !== 'todos' ? filtro : null;
+      const { whereClause, queryParams: baseParams } = buildClientesWhereClause(
+        search,
+        filtroActivo,
+        []
+      );
+
       const countQuery = `
         SELECT COUNT(*) as total
         FROM clientes c
+        ${BOLETA_STATS_LATERAL}
         ${whereClause}
       `;
-      const countResult = await query(countQuery, queryParams);
-      const total = parseInt(countResult.rows[0].total);
-      
-      // Paginación
+      const countResult = await query(countQuery, baseParams);
+      const total = parseInt(countResult.rows[0].total, 10);
+
+      const { whereClause: searchOnlyWhere, queryParams: resumenParams } = buildClientesWhereClause(
+        search,
+        null,
+        []
+      );
+      const resumenQuery = `
+        SELECT
+          COUNT(*)::int AS todos,
+          COUNT(*) FILTER (WHERE COALESCE(bs.total_boletas, 0) > 0)::int AS con_boletas,
+          COUNT(*) FILTER (WHERE COALESCE(bs.pagadas, 0) > 0)::int AS pagadas,
+          COUNT(*) FILTER (WHERE COALESCE(bs.reservadas, 0) > 0)::int AS reservadas,
+          COUNT(*) FILTER (WHERE COALESCE(bs.abonadas, 0) > 0)::int AS abonadas
+        FROM clientes c
+        ${BOLETA_STATS_LATERAL}
+        ${searchOnlyWhere}
+      `;
+      const resumenResult = await query(resumenQuery, resumenParams);
+      const resumenFiltros = resumenResult.rows[0];
+
       const offset = (page - 1) * limit;
-      paramCount++;
-      queryParams.push(limit);
-      paramCount++;
-      queryParams.push(offset);
-      
+      const listParams = [...baseParams, limit, offset];
+      const limitParam = baseParams.length + 1;
+      const offsetParam = baseParams.length + 2;
+
       const selectQuery = `
-        SELECT 
+        SELECT
           c.id, c.nombre, c.telefono, c.email, c.identificacion, c.direccion, c.created_at, c.updated_at,
           COALESCE(bs.total_boletas, 0)::int AS total_boletas,
           COALESCE(bs.pagadas, 0)::int AS boletas_pagadas,
@@ -248,41 +338,13 @@ class ClienteService {
           COALESCE(bs.abonadas, 0)::int AS boletas_abonadas,
           COALESCE(bs.deuda_total, 0)::numeric AS deuda_total
         FROM clientes c
-        LEFT JOIN LATERAL (
-          SELECT 
-            COUNT(*) AS total_boletas,
-            COUNT(*) FILTER (WHERE b.estado = 'PAGADA') AS pagadas,
-            COUNT(*) FILTER (WHERE b.estado = 'RESERVADA') AS reservadas,
-            COUNT(*) FILTER (WHERE b.estado = 'ABONADA') AS abonadas,
-            COALESCE(SUM(
-              CASE WHEN b.estado IN ('RESERVADA','ABONADA') THEN
-                GREATEST(
-                  r.precio_boleta
-                  - COALESCE(ab.total_abonado, 0),
-                  0
-                )
-              ELSE 0 END
-            ), 0) AS deuda_total
-          FROM boletas b
-          JOIN rifas r ON b.rifa_id = r.id
-          LEFT JOIN ventas v ON b.venta_id = v.id
-          LEFT JOIN LATERAL (
-            SELECT COUNT(*) AS cnt FROM boletas WHERE venta_id = v.id
-          ) bc ON true
-          LEFT JOIN LATERAL (
-            SELECT COALESCE(SUM(a.monto) FILTER (WHERE a.estado = 'CONFIRMADO'), 0) AS total_abonado
-            FROM abonos a WHERE a.boleta_id = b.id
-          ) ab ON true
-          WHERE b.cliente_id = c.id
-            AND r.estado = 'ACTIVA'
-            AND b.estado != 'DISPONIBLE'
-        ) bs ON true
+        ${BOLETA_STATS_LATERAL}
         ${whereClause}
         ORDER BY c.created_at DESC
-        LIMIT $${paramCount - 1} OFFSET $${paramCount}
+        LIMIT $${limitParam} OFFSET $${offsetParam}
       `;
-      
-      const result = await query(selectQuery, queryParams);
+
+      const result = await query(selectQuery, listParams);
 
       const rifaActualResult = await query(`
         SELECT id, nombre, estado
@@ -291,15 +353,22 @@ class ClienteService {
         ORDER BY created_at DESC
         LIMIT 1
       `);
-      
+
       return {
         clientes: result.rows,
         total,
         page,
         limit,
-        rifa_actual: rifaActualResult.rows[0] || null
+        rifa_actual: rifaActualResult.rows[0] || null,
+        resumen_filtros: {
+          todos: resumenFiltros.todos,
+          con_boletas: resumenFiltros.con_boletas,
+          pagadas: resumenFiltros.pagadas,
+          reservadas: resumenFiltros.reservadas,
+          abonadas: resumenFiltros.abonadas
+        }
       };
-      
+
     } catch (error) {
       logger.error('Error in getAllClientes service:', error);
       throw error;
