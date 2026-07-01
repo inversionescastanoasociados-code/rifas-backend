@@ -1,6 +1,12 @@
 const { query } = require('../../db/pool');
 const logger = require('../../utils/logger');
 
+// Cache en memoria de los contadores globales de filtros de clientes (tarjetas).
+// Solo se usa para la vista sin búsqueda (contadores globales), que son iguales
+// para todos y costosos de recalcular. TTL corto para minimizar el desfase.
+const RESUMEN_FILTROS_TTL_MS = 30000;
+let resumenFiltrosCache = { value: null, ts: 0 };
+
 const BOLETA_STATS_LATERAL = `
   LEFT JOIN LATERAL (
     SELECT
@@ -305,24 +311,45 @@ class ClienteService {
       const countResult = await query(countQuery, baseParams);
       const total = parseInt(countResult.rows[0].total, 10);
 
-      const { whereClause: searchOnlyWhere, queryParams: resumenParams } = buildClientesWhereClause(
-        search,
-        null,
-        []
-      );
-      const resumenQuery = `
-        SELECT
-          COUNT(*)::int AS todos,
-          COUNT(*) FILTER (WHERE COALESCE(bs.total_boletas, 0) > 0)::int AS con_boletas,
-          COUNT(*) FILTER (WHERE COALESCE(bs.pagadas, 0) > 0)::int AS pagadas,
-          COUNT(*) FILTER (WHERE COALESCE(bs.reservadas, 0) > 0)::int AS reservadas,
-          COUNT(*) FILTER (WHERE COALESCE(bs.abonadas, 0) > 0)::int AS abonadas
-        FROM clientes c
-        ${BOLETA_STATS_LATERAL}
-        ${searchOnlyWhere}
-      `;
-      const resumenResult = await query(resumenQuery, resumenParams);
-      const resumenFiltros = resumenResult.rows[0];
+      // Los contadores globales (tarjetas de filtro) no dependen del filtro ni de
+      // la página. Cuando no hay búsqueda, se cachean brevemente para no re-escanear
+      // todos los clientes en cada carga. La lista y la paginación siguen siendo
+      // siempre frescas; solo estos totales pueden tener hasta RESUMEN_FILTROS_TTL_MS
+      // de retraso frente a un cambio muy reciente.
+      let resumenFiltros;
+      const puedeUsarCache = !search;
+      const ahora = Date.now();
+
+      if (
+        puedeUsarCache &&
+        resumenFiltrosCache.value &&
+        ahora - resumenFiltrosCache.ts < RESUMEN_FILTROS_TTL_MS
+      ) {
+        resumenFiltros = resumenFiltrosCache.value;
+      } else {
+        const { whereClause: searchOnlyWhere, queryParams: resumenParams } = buildClientesWhereClause(
+          search,
+          null,
+          []
+        );
+        const resumenQuery = `
+          SELECT
+            COUNT(*)::int AS todos,
+            COUNT(*) FILTER (WHERE COALESCE(bs.total_boletas, 0) > 0)::int AS con_boletas,
+            COUNT(*) FILTER (WHERE COALESCE(bs.pagadas, 0) > 0)::int AS pagadas,
+            COUNT(*) FILTER (WHERE COALESCE(bs.reservadas, 0) > 0)::int AS reservadas,
+            COUNT(*) FILTER (WHERE COALESCE(bs.abonadas, 0) > 0)::int AS abonadas
+          FROM clientes c
+          ${BOLETA_STATS_LATERAL}
+          ${searchOnlyWhere}
+        `;
+        const resumenResult = await query(resumenQuery, resumenParams);
+        resumenFiltros = resumenResult.rows[0];
+
+        if (puedeUsarCache) {
+          resumenFiltrosCache = { value: resumenFiltros, ts: ahora };
+        }
+      }
 
       const offset = (page - 1) * limit;
       const listParams = [...baseParams, limit, offset];

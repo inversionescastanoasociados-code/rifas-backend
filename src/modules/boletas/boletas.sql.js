@@ -93,10 +93,12 @@ const SQL_QUERIES = {
   
   GET_BOLETAS_STATS: `
     SELECT 
-      COUNT(*) as total_boletas,
-      COUNT(CASE WHEN estado = 'vendida' THEN 1 END) as boletas_vendidas,
-      COUNT(CASE WHEN estado = 'disponible' THEN 1 END) as boletas_disponibles,
-      COUNT(CASE WHEN estado = 'reservada' THEN 1 END) as boletas_reservadas
+      COUNT(*)::int as total_boletas,
+      COUNT(*) FILTER (WHERE estado = 'DISPONIBLE')::int as boletas_disponibles,
+      COUNT(*) FILTER (WHERE estado = 'PAGADA')::int as boletas_pagadas,
+      COUNT(*) FILTER (WHERE estado = 'RESERVADA')::int as boletas_reservadas,
+      COUNT(*) FILTER (WHERE estado = 'ABONADA')::int as boletas_abonadas,
+      COUNT(*) FILTER (WHERE estado = 'DISPONIBLE' AND bloqueo_hasta IS NOT NULL AND bloqueo_hasta > CURRENT_TIMESTAMP)::int as boletas_bloqueadas
     FROM boletas 
     WHERE rifa_id = $1
   `,
