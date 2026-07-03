@@ -440,6 +440,14 @@ class PublicDashboardService {
       origen: 'dashboard.liberarBoletaManual',
     });
     try {
+      // Capturar la venta origen ANTES de liberar (después del UPDATE
+      // venta_id queda NULL, no la podríamos recalcular).
+      const ventaOrigenResult = await tx.query(
+        `SELECT venta_id FROM boletas WHERE id = $1 FOR UPDATE`,
+        [boletaId]
+      );
+      const ventaOrigenId = ventaOrigenResult.rows[0]?.venta_id || null;
+
       // Liberar la boleta
       const result = await tx.query(SQL_QUERIES.LIBERAR_BOLETA_MANUAL, [boletaId]);
       
@@ -454,6 +462,16 @@ class PublicDashboardService {
         `UPDATE rifas SET boletas_vendidas = GREATEST(boletas_vendidas - 1, 0), updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
         [boleta.rifa_id]
       );
+
+      // Si la boleta pertenecía a una venta con más boletas, recalcular el
+      // monto_total de esa venta según las boletas que le quedan (evita que
+      // siga mostrando el precio total original de antes de liberar esta).
+      if (ventaOrigenId) {
+        const recalculo = await tx.query(SQL_QUERIES.RECALCULAR_VENTA_POR_BOLETAS_RESTANTES, [ventaOrigenId]);
+        if (recalculo.rows.length > 0) {
+          logger.info(`Venta ${ventaOrigenId} recalculada tras liberar boleta #${boleta.numero}: nuevo monto_total=${recalculo.rows[0].monto_total}, estado=${recalculo.rows[0].estado_venta}`);
+        }
+      }
 
       await tx.commit();
       logger.info(`Boleta #${boleta.numero} liberada manualmente (rifa: ${boleta.rifa_id})`);

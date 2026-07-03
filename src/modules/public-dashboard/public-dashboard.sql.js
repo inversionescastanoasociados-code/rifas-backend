@@ -258,6 +258,38 @@ const SQL_QUERIES = {
     RETURNING id, numero, rifa_id
   `,
 
+  // Recalcular monto_total/estado_venta de una venta según las boletas que
+  // le quedan REALMENTE vinculadas (evita que al liberar una sola boleta de
+  // una venta con varias, la venta restante siga mostrando el precio total
+  // original en vez del precio de las boletas que aún tiene).
+  RECALCULAR_VENTA_POR_BOLETAS_RESTANTES: `
+    UPDATE ventas v
+    SET monto_total = sub.nuevo_monto,
+        estado_venta = CASE
+          WHEN sub.num_boletas = 0 AND v.estado_venta IN ('PENDIENTE', 'SIN_REVISAR', 'ABONADA')
+            THEN 'CANCELADA'
+          WHEN sub.num_boletas > 0 AND sub.num_no_pagadas = 0
+            THEN 'PAGADA'
+          ELSE v.estado_venta
+        END,
+        updated_at = CURRENT_TIMESTAMP
+    FROM (
+      SELECT
+        r.precio_boleta,
+        COUNT(b.id) AS num_boletas,
+        COUNT(b.id) FILTER (WHERE b.estado <> 'PAGADA') AS num_no_pagadas,
+        (COUNT(b.id)::numeric * r.precio_boleta) AS nuevo_monto
+      FROM ventas vv
+      JOIN rifas r ON r.id = vv.rifa_id
+      LEFT JOIN boletas b ON b.venta_id = vv.id
+      WHERE vv.id = $1
+      GROUP BY r.precio_boleta
+    ) sub
+    WHERE v.id = $1
+      AND v.monto_total <> sub.nuevo_monto
+    RETURNING v.id, v.monto_total, v.abono_total, v.saldo_pendiente, v.estado_venta
+  `,
+
   // LIBERAR TODAS LAS BOLETAS DE UNA VENTA
   LIBERAR_BOLETAS_DE_VENTA: `
     UPDATE boletas
