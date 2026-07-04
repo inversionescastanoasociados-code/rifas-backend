@@ -375,19 +375,54 @@ class SuperadminVentasService {
   async cambiarMedioPagoVenta(ventaId, medioPagoId, userId) {
     const tx = await beginTransaction({ usuarioId: userId, origen: 'superadmin.cambiarMedioPagoVenta' });
     try {
-      const ventaRes = await tx.query(`SELECT id FROM ventas WHERE id = $1 FOR UPDATE`, [ventaId]);
+      const ventaRes = await tx.query(
+        `SELECT id, rifa_id, cliente_id FROM ventas WHERE id = $1 FOR UPDATE`,
+        [ventaId]
+      );
       if (ventaRes.rows.length === 0) throw Object.assign(new Error('Venta no encontrada'), { statusCode: 404 });
+      const venta = ventaRes.rows[0];
 
       const gateway = await this.getGatewayNombre(tx, medioPagoId);
       if (!gateway) throw new Error('Medio de pago inválido');
 
+      // 1) Cabecera de la venta.
       await tx.query(
         `UPDATE ventas SET medio_pago_id = $2, gateway_pago = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
         [ventaId, medioPagoId, gateway]
       );
 
+      // 2) Propagar a los abonos NO anulados para que el cambio se refleje en
+      //    el módulo de ventas, en boletas y en el historial (el trigger
+      //    historial_abonos_upd registra cada cambio de medio automáticamente).
+      const nota = ` | Método cambiado a ${gateway} por superadmin ${new Date().toISOString().slice(0, 10)}`;
+      const updAbonos = await tx.query(
+        `UPDATE abonos
+         SET medio_pago_id = $2, gateway_pago = $3, notas = COALESCE(notas, '') || $4
+         WHERE venta_id = $1 AND estado <> 'ANULADO'
+           AND (medio_pago_id IS DISTINCT FROM $2 OR gateway_pago IS DISTINCT FROM $3)
+         RETURNING id`,
+        [ventaId, medioPagoId, gateway, nota]
+      );
+
+      // 3) Registrar el cambio a nivel de venta (el trigger de ventas solo
+      //    registra cambios de estado, no de método de pago).
+      await tx.query(
+        `INSERT INTO historial_movimientos
+           (entidad, accion, rifa_id, cliente_id, venta_id, usuario_id, medio_pago_id, origen, notas, metadata)
+         VALUES ('VENTA', 'CAMBIO_MEDIO_PAGO', $1, $2, $3, historial_usuario_contexto(), $4,
+                 historial_origen_contexto(), $5, $6::jsonb)`,
+        [
+          venta.rifa_id,
+          venta.cliente_id,
+          ventaId,
+          medioPagoId,
+          `Método de pago de la venta cambiado a ${gateway}`,
+          JSON.stringify({ abonos_actualizados: updAbonos.rowCount, gateway_pago: gateway }),
+        ]
+      );
+
       await tx.commit();
-      logger.info(`[superadmin] Medio de pago de venta ${ventaId} cambiado a ${gateway}`);
+      logger.info(`[superadmin] Medio de pago de venta ${ventaId} cambiado a ${gateway} (${updAbonos.rowCount} abonos actualizados)`);
       return this.getVentaDetalle(ventaId);
     } catch (error) {
       await tx.rollback();
