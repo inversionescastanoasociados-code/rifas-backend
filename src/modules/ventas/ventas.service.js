@@ -1215,6 +1215,9 @@ async buscarBoletaParaAbono(numeroBoleta, rifaId = null) {
   if (rifaId) {
     boletaQuery += ` AND b.rifa_id = $2`;
     params.push(rifaId);
+  } else {
+    // Solo rifa actual (ACTIVA): evita mezclar boletas de rifas terminadas.
+    boletaQuery += ` AND r.estado = 'ACTIVA'`;
   }
 
   boletaQuery += ` ORDER BY b.created_at DESC LIMIT 5`;
@@ -1458,11 +1461,13 @@ const totalPagado = abonosActivos.reduce(
 
 async getVentasPorCliente(clienteId) {
   const ventas = await query(
-    `SELECT id, monto_total, estado_venta, created_at
-     FROM ventas
-     WHERE cliente_id = $1
-       AND estado_venta IN ('PENDIENTE', 'ABONADA')
-     ORDER BY created_at DESC`,
+    `SELECT v.id, v.monto_total, v.estado_venta, v.created_at
+     FROM ventas v
+     JOIN rifas r ON r.id = v.rifa_id
+     WHERE v.cliente_id = $1
+       AND v.estado_venta IN ('PENDIENTE', 'ABONADA')
+       AND r.estado = 'ACTIVA'
+     ORDER BY v.created_at DESC`,
     [clienteId]
   );
 
