@@ -1348,11 +1348,12 @@ async getVentaDetalleFinanciero(id) {
 
   const venta = ventaResult.rows[0];
 
- // 2) Todos los abonos de la venta, incluyendo número de boleta
+ // 2) Todos los abonos de la venta, incluyendo número de boleta y quién lo registró
 const abonosResult = await query(
-  `SELECT a.*, b.numero AS boleta_numero
+  `SELECT a.*, b.numero AS boleta_numero, u.nombre AS registrado_por_nombre
    FROM abonos a
    JOIN boletas b ON a.boleta_id = b.id
+   LEFT JOIN usuarios u ON u.id = a.registrado_por
    WHERE a.venta_id = $1
    ORDER BY a.created_at ASC`,
   [id]
@@ -1418,7 +1419,8 @@ const totalPagado = abonosActivos.reduce(
       referencia: abono.referencia,
       metodo_pago: abono.gateway_pago || 'N/A',
       notas: abono.notas,
-      fecha: abono.created_at
+      fecha: abono.created_at,
+      registrado_por_nombre: abono.registrado_por_nombre || null,
     });
   }
 
