@@ -22,6 +22,10 @@ const clienteIdSchema = Joi.object({
   clienteId: Joi.string().uuid().required()
 });
 
+const notificarBodySchema = Joi.object({
+  linea_contacto: Joi.number().integer().min(1).max(5).required()
+});
+
 // GET /api/recordatorios - Listar clientes con boletas pendientes para recordatorio
 router.get('/',
   authenticateToken,
@@ -50,6 +54,7 @@ router.post('/:clienteId/notificar',
   authenticateToken,
   authorize(['SUPER_ADMIN', 'ADMIN', 'VENDEDOR']),
   validateParams(clienteIdSchema),
+  validate(notificarBodySchema),
   recordatorioController.registrarNotificacion
 );
 

@@ -39,8 +39,13 @@ class RecordatorioController {
     try {
       const { clienteId } = req.params;
       const userId = req.user?.id || null;
+      const { linea_contacto: lineaContacto } = req.body;
 
-      const notificacion = await recordatorioService.registrarNotificacion(clienteId, userId);
+      const notificacion = await recordatorioService.registrarNotificacion(
+        clienteId,
+        userId,
+        lineaContacto
+      );
 
       res.status(201).json({
         success: true,

@@ -97,6 +97,19 @@ async function runMigrations() {
   } catch (error) {
     logger.warn('[Migrations] Error en migración 8:', error.message);
   }
+
+  // ── Migración 9: linea_contacto en notificaciones_recordatorio ──
+  try {
+    const sqlPath9 = path.join(
+      __dirname,
+      '../../scripts/migrations/009_notificaciones_linea_contacto.sql'
+    );
+    const migrationSql9 = fs.readFileSync(sqlPath9, 'utf8');
+    await pool.query(migrationSql9);
+    logger.info('[Migrations] notificaciones_recordatorio.linea_contacto verificado');
+  } catch (error) {
+    logger.warn('[Migrations] Error en migración 9:', error.message);
+  }
 }
 
 module.exports = { runMigrations };

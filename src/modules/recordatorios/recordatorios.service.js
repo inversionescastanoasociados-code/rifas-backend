@@ -48,6 +48,10 @@ class RecordatorioService {
         CREATE INDEX IF NOT EXISTS idx_notif_recordatorio_rifa_cliente
         ON notificaciones_recordatorio (cliente_id, rifa_id)
       `);
+      await query(`
+        ALTER TABLE notificaciones_recordatorio
+          ADD COLUMN IF NOT EXISTS linea_contacto SMALLINT
+      `);
       logger.info('Table notificaciones_recordatorio ensured');
     } catch (error) {
       logger.error('Error ensuring notificaciones_recordatorio table:', error);
@@ -168,6 +172,14 @@ class RecordatorioService {
           FROM notificaciones_recordatorio nr
           WHERE ${SQL_NOTIF_RIFA_ACTIVA}
           GROUP BY nr.cliente_id
+        ),
+        ultima_notif AS (
+          SELECT DISTINCT ON (nr.cliente_id)
+            nr.cliente_id,
+            nr.linea_contacto AS ultima_linea_contacto
+          FROM notificaciones_recordatorio nr
+          WHERE ${SQL_NOTIF_RIFA_ACTIVA}
+          ORDER BY nr.cliente_id, nr.created_at DESC
         )
         SELECT 
           c.id, c.nombre, c.telefono, c.email, c.identificacion, c.direccion, c.created_at, c.updated_at,
@@ -179,12 +191,14 @@ class RecordatorioService {
           COALESCE(bs.deuda_total, 0)::numeric AS deuda_total,
           COALESCE(ni.total_notificaciones, 0)::int AS total_notificaciones,
           ni.ultima_notificacion,
+          un.ultima_linea_contacto,
           vi.vendedor_id,
           vi.vendedor_nombre
         FROM clientes c
         INNER JOIN boleta_stats bs ON bs.cliente_id = c.id
         LEFT JOIN vendedor_info vi ON vi.cliente_id = c.id
         LEFT JOIN notif_info ni ON ni.cliente_id = c.id
+        LEFT JOIN ultima_notif un ON un.cliente_id = c.id
         WHERE ${conditions.join(' AND ')}
         ${searchCondition}
         ${notificado === 'si' ? 'AND ni.total_notificaciones > 0' : ''}
@@ -226,20 +240,25 @@ class RecordatorioService {
   /**
    * Record a notification for a client (scoped to active rifa).
    */
-  async registrarNotificacion(clienteId, userId) {
+  async registrarNotificacion(clienteId, userId, lineaContacto) {
     try {
+      const linea = Number(lineaContacto);
+      if (!Number.isInteger(linea) || linea < 1 || linea > 5) {
+        throw new Error('La línea de contacto debe ser un número entre 1 y 5');
+      }
+
       const rifaId = await this.getRifaActivaParaCliente(clienteId);
       if (!rifaId) {
         throw new Error('No hay rifa activa para registrar el contacto');
       }
 
       const result = await query(`
-        INSERT INTO notificaciones_recordatorio (cliente_id, notificado_por, rifa_id)
-        VALUES ($1, $2, $3)
-        RETURNING id, cliente_id, notificado_por, rifa_id, created_at
-      `, [clienteId, userId, rifaId]);
+        INSERT INTO notificaciones_recordatorio (cliente_id, notificado_por, rifa_id, linea_contacto)
+        VALUES ($1, $2, $3, $4)
+        RETURNING id, cliente_id, notificado_por, rifa_id, linea_contacto, created_at
+      `, [clienteId, userId, rifaId, linea]);
 
-      logger.info(`Notificación registrada para cliente ${clienteId} rifa ${rifaId} por usuario ${userId}`);
+      logger.info(`Notificación registrada para cliente ${clienteId} rifa ${rifaId} línea ${linea} por usuario ${userId}`);
       return result.rows[0];
     } catch (error) {
       logger.error('Error in registrarNotificacion:', error);
@@ -254,7 +273,7 @@ class RecordatorioService {
     try {
       const result = await query(`
         SELECT 
-          nr.id, nr.created_at, nr.rifa_id,
+          nr.id, nr.created_at, nr.rifa_id, nr.linea_contacto,
           u.nombre AS notificado_por_nombre
         FROM notificaciones_recordatorio nr
         LEFT JOIN usuarios u ON nr.notificado_por = u.id
