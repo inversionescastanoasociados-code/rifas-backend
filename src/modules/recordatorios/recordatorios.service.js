@@ -1,6 +1,19 @@
 const { query } = require('../../db/pool');
 const logger = require('../../utils/logger');
 
+/**
+ * Deuda máxima por boleta para NO aparecer en recordatorios.
+ * En anticipado participan con mínimo $80.000 abonados; quien debe $50.000 o menos ya cumplió.
+ * Solo entran clientes con al menos una boleta cuya deuda sea MAYOR a este valor.
+ */
+const MAX_DEUDA_EXCLUIDA = 50000;
+
+/** Saldo pendiente por boleta (RESERVADA/ABONADA). */
+const SQL_SALDO_BOLETA = `GREATEST(r.precio_boleta - COALESCE(ab.total_abonado, 0), 0)`;
+
+/** Boleta pendiente que califica para recordatorio (deuda estrictamente mayor a $50.000). */
+const SQL_BOLETA_RECORDATORIO = `b.estado IN ('RESERVADA','ABONADA') AND ${SQL_SALDO_BOLETA} > ${MAX_DEUDA_EXCLUIDA}`;
+
 class RecordatorioService {
   /**
    * Ensure the notificaciones_recordatorio table exists
@@ -43,8 +56,7 @@ class RecordatorioService {
       } else if (filtro === 'abonadas') {
         conditions.push(`bs.abonadas > 0`);
       } else if (filtro === 'crucero') {
-        // 'crucero' - clients with at least one pending boleta with abono < 90000
-        // (includes RESERVADA boletas which have abono = 0)
+        // Boletas pendientes con deuda mayor a $50.000
         conditions.push(`bs.crucero_boletas > 0`);
       } else {
         // 'todos' - clients with any pending boletas
@@ -77,25 +89,19 @@ class RecordatorioService {
         WITH boleta_stats AS (
           SELECT 
             b.cliente_id,
-            COUNT(*) FILTER (WHERE b.estado = 'RESERVADA') AS reservadas,
+            COUNT(*) FILTER (
+              WHERE b.estado = 'RESERVADA'
+                AND ${SQL_SALDO_BOLETA} > ${MAX_DEUDA_EXCLUIDA}
+            ) AS reservadas,
             COUNT(*) FILTER (
               WHERE b.estado = 'ABONADA'
-                AND COALESCE(ab.total_abonado, 0) > 0
-                AND COALESCE(ab.total_abonado, 0) < 90000
+                AND ${SQL_SALDO_BOLETA} > ${MAX_DEUDA_EXCLUIDA}
             ) AS abonadas,
             COUNT(*) FILTER (WHERE b.estado = 'PAGADA') AS pagadas,
             COUNT(*) AS total_boletas,
-            COUNT(*) FILTER (
-              WHERE b.estado IN ('RESERVADA','ABONADA')
-                AND COALESCE(ab.total_abonado, 0) < 90000
-            ) AS crucero_boletas,
+            COUNT(*) FILTER (WHERE ${SQL_BOLETA_RECORDATORIO}) AS crucero_boletas,
             COALESCE(SUM(
-              CASE WHEN b.estado IN ('RESERVADA','ABONADA') THEN
-                GREATEST(
-                  r.precio_boleta - COALESCE(ab.total_abonado, 0),
-                  0
-                )
-              ELSE 0 END
+              CASE WHEN ${SQL_BOLETA_RECORDATORIO} THEN ${SQL_SALDO_BOLETA} ELSE 0 END
             ), 0) AS deuda_total
           FROM boletas b
           JOIN rifas r ON b.rifa_id = r.id
@@ -239,17 +245,17 @@ class RecordatorioService {
         WITH boleta_stats AS (
           SELECT 
             b.cliente_id,
-            COUNT(*) FILTER (WHERE b.estado = 'RESERVADA') AS reservadas,
+            COUNT(*) FILTER (
+              WHERE b.estado = 'RESERVADA'
+                AND ${SQL_SALDO_BOLETA} > ${MAX_DEUDA_EXCLUIDA}
+            ) AS reservadas,
             COUNT(*) FILTER (
               WHERE b.estado = 'ABONADA'
-                AND COALESCE(ab.total_abonado, 0) > 0
-                AND COALESCE(ab.total_abonado, 0) < 90000
+                AND ${SQL_SALDO_BOLETA} > ${MAX_DEUDA_EXCLUIDA}
             ) AS abonadas,
-            COUNT(*) FILTER (
-              WHERE b.estado IN ('RESERVADA','ABONADA')
-                AND COALESCE(ab.total_abonado, 0) < 90000
-            ) AS crucero_boletas
+            COUNT(*) FILTER (WHERE ${SQL_BOLETA_RECORDATORIO}) AS crucero_boletas
           FROM boletas b
+          JOIN rifas r ON b.rifa_id = r.id
           LEFT JOIN LATERAL (
             SELECT COALESCE(SUM(a.monto) FILTER (WHERE a.estado = 'CONFIRMADO'), 0) AS total_abonado
             FROM abonos a WHERE a.boleta_id = b.id
