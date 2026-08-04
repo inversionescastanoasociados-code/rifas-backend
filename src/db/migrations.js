@@ -84,6 +84,19 @@ async function runMigrations() {
   } catch (error) {
     logger.warn('[Migrations] Error en migración 6:', error.message);
   }
+
+  // ── Migración 8: rifa_id en notificaciones_recordatorio ──
+  try {
+    const sqlPath8 = path.join(
+      __dirname,
+      '../../scripts/migrations/008_notificaciones_recordatorio_rifa.sql'
+    );
+    const migrationSql8 = fs.readFileSync(sqlPath8, 'utf8');
+    await pool.query(migrationSql8);
+    logger.info('[Migrations] notificaciones_recordatorio.rifa_id verificado');
+  } catch (error) {
+    logger.warn('[Migrations] Error en migración 8:', error.message);
+  }
 }
 
 module.exports = { runMigrations };

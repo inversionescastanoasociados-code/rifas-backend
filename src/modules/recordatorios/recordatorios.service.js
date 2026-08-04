@@ -8,11 +8,19 @@ const logger = require('../../utils/logger');
  */
 const MAX_DEUDA_EXCLUIDA = 50000;
 
+/** Solo rifa(s) del proyecto actual — no mezclar con rifas anteriores. */
+const SQL_RIFA_ACTIVA = `r.estado = 'ACTIVA'`;
+
 /** Saldo pendiente por boleta (RESERVADA/ABONADA). */
 const SQL_SALDO_BOLETA = `GREATEST(r.precio_boleta - COALESCE(ab.total_abonado, 0), 0)`;
 
 /** Boleta pendiente que califica para recordatorio (deuda estrictamente mayor a $50.000). */
 const SQL_BOLETA_RECORDATORIO = `b.estado IN ('RESERVADA','ABONADA') AND ${SQL_SALDO_BOLETA} > ${MAX_DEUDA_EXCLUIDA}`;
+
+/** Notificaciones de contacto solo de la rifa activa (legacy sin rifa_id no cuenta). */
+const SQL_NOTIF_RIFA_ACTIVA = `
+  nr.rifa_id IN (SELECT id FROM rifas WHERE estado = 'ACTIVA')
+`;
 
 class RecordatorioService {
   /**
@@ -32,11 +40,44 @@ class RecordatorioService {
         CREATE INDEX IF NOT EXISTS idx_notif_recordatorio_cliente 
         ON notificaciones_recordatorio(cliente_id)
       `);
+      await query(`
+        ALTER TABLE notificaciones_recordatorio
+          ADD COLUMN IF NOT EXISTS rifa_id UUID REFERENCES rifas(id) ON DELETE CASCADE
+      `);
+      await query(`
+        CREATE INDEX IF NOT EXISTS idx_notif_recordatorio_rifa_cliente
+        ON notificaciones_recordatorio (cliente_id, rifa_id)
+      `);
       logger.info('Table notificaciones_recordatorio ensured');
     } catch (error) {
       logger.error('Error ensuring notificaciones_recordatorio table:', error);
       throw error;
     }
+  }
+
+  /**
+   * Rifa activa donde el cliente tiene boletas pendientes (para registrar contacto).
+   */
+  async getRifaActivaParaCliente(clienteId) {
+    const result = await query(`
+      SELECT DISTINCT b.rifa_id
+      FROM boletas b
+      JOIN rifas r ON b.rifa_id = r.id
+      WHERE b.cliente_id = $1
+        AND ${SQL_RIFA_ACTIVA}
+        AND b.estado IN ('RESERVADA', 'ABONADA')
+      ORDER BY b.rifa_id
+      LIMIT 1
+    `, [clienteId]);
+
+    if (result.rows[0]?.rifa_id) {
+      return result.rows[0].rifa_id;
+    }
+
+    const fallback = await query(`
+      SELECT id FROM rifas WHERE estado = 'ACTIVA' ORDER BY created_at DESC LIMIT 1
+    `);
+    return fallback.rows[0]?.id || null;
   }
 
   /**
@@ -50,20 +91,16 @@ class RecordatorioService {
       let paramCount = 0;
       const conditions = [];
 
-      // Base: only clients with RESERVADA or ABONADA boletas
       if (filtro === 'reservadas') {
         conditions.push(`bs.reservadas > 0`);
       } else if (filtro === 'abonadas') {
         conditions.push(`bs.abonadas > 0`);
       } else if (filtro === 'crucero') {
-        // Boletas pendientes con deuda mayor a $50.000
         conditions.push(`bs.crucero_boletas > 0`);
       } else {
-        // 'todos' - clients with any pending boletas
         conditions.push(`(bs.reservadas > 0 OR bs.abonadas > 0)`);
       }
 
-      // Search
       let searchCondition = '';
       if (search) {
         paramCount++;
@@ -76,7 +113,6 @@ class RecordatorioService {
         params.push(`%${search}%`);
       }
 
-      // Vendedor filter
       let vendedorCondition = '';
       if (vendedor) {
         paramCount++;
@@ -84,7 +120,6 @@ class RecordatorioService {
         params.push(vendedor);
       }
 
-      // Build the main query with a CTE for boleta stats and notification info
       const mainQuery = `
         WITH boleta_stats AS (
           SELECT 
@@ -109,7 +144,7 @@ class RecordatorioService {
             SELECT COALESCE(SUM(a.monto) FILTER (WHERE a.estado = 'CONFIRMADO'), 0) AS total_abonado
             FROM abonos a WHERE a.boleta_id = b.id
           ) ab ON true
-          WHERE 1=1 ${vendedorCondition}
+          WHERE ${SQL_RIFA_ACTIVA} ${vendedorCondition}
           GROUP BY b.cliente_id
         ),
         vendedor_info AS (
@@ -118,18 +153,21 @@ class RecordatorioService {
             u.id AS vendedor_id,
             u.nombre AS vendedor_nombre
           FROM boletas b
+          JOIN rifas r ON b.rifa_id = r.id
           JOIN usuarios u ON b.vendido_por = u.id
           WHERE b.estado IN ('RESERVADA', 'ABONADA')
+            AND ${SQL_RIFA_ACTIVA}
           ${vendedorCondition}
           ORDER BY b.cliente_id, b.created_at DESC
         ),
         notif_info AS (
           SELECT 
-            cliente_id,
+            nr.cliente_id,
             COUNT(*) AS total_notificaciones,
-            MAX(created_at) AS ultima_notificacion
-          FROM notificaciones_recordatorio
-          GROUP BY cliente_id
+            MAX(nr.created_at) AS ultima_notificacion
+          FROM notificaciones_recordatorio nr
+          WHERE ${SQL_NOTIF_RIFA_ACTIVA}
+          GROUP BY nr.cliente_id
         )
         SELECT 
           c.id, c.nombre, c.telefono, c.email, c.identificacion, c.direccion, c.created_at, c.updated_at,
@@ -153,14 +191,12 @@ class RecordatorioService {
         ${notificado === 'no' ? 'AND (ni.total_notificaciones IS NULL OR ni.total_notificaciones = 0)' : ''}
       `;
 
-      // Count query
       const countQuery = `
         SELECT COUNT(*) AS total FROM (${mainQuery}) sub
       `;
       const countResult = await query(countQuery, params);
       const total = parseInt(countResult.rows[0].total);
 
-      // Data query with pagination - oldest first
       const offset = (page - 1) * limit;
       paramCount++;
       params.push(limit);
@@ -188,17 +224,22 @@ class RecordatorioService {
   }
 
   /**
-   * Record a notification for a client
+   * Record a notification for a client (scoped to active rifa).
    */
   async registrarNotificacion(clienteId, userId) {
     try {
-      const result = await query(`
-        INSERT INTO notificaciones_recordatorio (cliente_id, notificado_por)
-        VALUES ($1, $2)
-        RETURNING id, cliente_id, notificado_por, created_at
-      `, [clienteId, userId]);
+      const rifaId = await this.getRifaActivaParaCliente(clienteId);
+      if (!rifaId) {
+        throw new Error('No hay rifa activa para registrar el contacto');
+      }
 
-      logger.info(`Notificación registrada para cliente ${clienteId} por usuario ${userId}`);
+      const result = await query(`
+        INSERT INTO notificaciones_recordatorio (cliente_id, notificado_por, rifa_id)
+        VALUES ($1, $2, $3)
+        RETURNING id, cliente_id, notificado_por, rifa_id, created_at
+      `, [clienteId, userId, rifaId]);
+
+      logger.info(`Notificación registrada para cliente ${clienteId} rifa ${rifaId} por usuario ${userId}`);
       return result.rows[0];
     } catch (error) {
       logger.error('Error in registrarNotificacion:', error);
@@ -207,17 +248,18 @@ class RecordatorioService {
   }
 
   /**
-   * Get notification history for a specific client
+   * Get notification history for a specific client (active rifa only).
    */
   async getNotificacionesCliente(clienteId) {
     try {
       const result = await query(`
         SELECT 
-          nr.id, nr.created_at,
+          nr.id, nr.created_at, nr.rifa_id,
           u.nombre AS notificado_por_nombre
         FROM notificaciones_recordatorio nr
         LEFT JOIN usuarios u ON nr.notificado_por = u.id
         WHERE nr.cliente_id = $1
+          AND ${SQL_NOTIF_RIFA_ACTIVA}
         ORDER BY nr.created_at DESC
         LIMIT 20
       `, [clienteId]);
@@ -260,12 +302,13 @@ class RecordatorioService {
             SELECT COALESCE(SUM(a.monto) FILTER (WHERE a.estado = 'CONFIRMADO'), 0) AS total_abonado
             FROM abonos a WHERE a.boleta_id = b.id
           ) ab ON true
-          WHERE 1=1 ${vendedorCondition}
+          WHERE ${SQL_RIFA_ACTIVA} ${vendedorCondition}
           GROUP BY b.cliente_id
         ),
         notif_info AS (
-          SELECT DISTINCT cliente_id
-          FROM notificaciones_recordatorio
+          SELECT DISTINCT nr.cliente_id
+          FROM notificaciones_recordatorio nr
+          WHERE ${SQL_NOTIF_RIFA_ACTIVA}
         )
         SELECT
           COUNT(*) FILTER (WHERE bs.reservadas > 0 OR bs.abonadas > 0) AS total_pendientes,
@@ -286,7 +329,7 @@ class RecordatorioService {
   }
 
   /**
-   * Get list of vendedores/admins who have sold boletas
+   * Get list of vendedores/admins who have sold boletas in the active rifa
    */
   async getVendedores() {
     try {
@@ -294,7 +337,9 @@ class RecordatorioService {
         SELECT DISTINCT u.id, u.nombre, u.rol
         FROM usuarios u
         INNER JOIN boletas b ON b.vendido_por = u.id
+        INNER JOIN rifas r ON b.rifa_id = r.id
         WHERE b.estado IN ('RESERVADA', 'ABONADA')
+          AND ${SQL_RIFA_ACTIVA}
           AND u.activo = true
         ORDER BY u.nombre ASC
       `);
