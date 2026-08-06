@@ -8,6 +8,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_ventas_referencia_pago_unique
   ON ventas (referencia_pago)
   WHERE referencia_pago IS NOT NULL AND btrim(referencia_pago) <> '';
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_abonos_referencia_unique
-  ON abonos (referencia)
-  WHERE referencia IS NOT NULL AND btrim(referencia) <> '';
+-- El índice único sobre abonos.referencia que vivía aquí se retiró: un solo pago
+-- crea un abono por cada boleta de la venta y todos comparten el comprobante.
+-- La unicidad correcta, por (referencia, boleta_id), la define la migración 012.
