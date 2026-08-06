@@ -38,10 +38,14 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Aplicar rate limiting general a todas las rutas API
 app.use('/api', generalLimiter);
 
-app.use((req, res, next) => {
-  logger.info(`${req.method} ${req.path} - ${req.ip}`);
-  next();
-});
+// En producción no loguear cada request (I/O a disco/consola en cada petición
+// bloquea el event loop y empeora los picos de response time en Railway).
+if (config.nodeEnv !== 'production') {
+  app.use((req, res, next) => {
+    logger.info(`${req.method} ${req.path} - ${req.ip}`);
+    next();
+  });
+}
 
 // Bloqueo global cuando hay una rifa en pausa: ADMIN y VENDEDOR no pueden
 // realizar ninguna acción; SUPER_ADMIN mantiene acceso para reactivar.

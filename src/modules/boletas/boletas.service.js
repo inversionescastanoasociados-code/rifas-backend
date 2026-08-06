@@ -391,6 +391,16 @@ class BoletaService {
     }
   }
 
+  async getBoletasDisponiblesLight(rifa_id) {
+    try {
+      const result = await query(SQL_QUERIES.GET_BOLETAS_DISPONIBLES_LIGHT, [rifa_id]);
+      return result.rows;
+    } catch (error) {
+      logger.error(`Error getting disponibles light for rifa ${rifa_id}:`, error);
+      throw error;
+    }
+  }
+
   async getBoletasStats(rifa_id) {
     try {
       const result = await query(SQL_QUERIES.GET_BOLETAS_STATS, [rifa_id]);

@@ -94,6 +94,32 @@ class SuperadminVentasService {
     return r.rows[0]?.nombre || null;
   }
 
+  /**
+   * Verifica que el número de comprobante no esté ya usado en `ventas.referencia_pago`
+   * ni en `abonos.referencia` (excluyendo el propio registro que se está editando).
+   */
+  async verificarComprobanteUnico(tx, referencia, { excludeVentaId, excludeAbonoId } = {}) {
+    if (!referencia) return;
+
+    const ventaParams = excludeVentaId ? [referencia, excludeVentaId] : [referencia];
+    const ventaExistente = await tx.query(
+      `SELECT id FROM ventas WHERE referencia_pago = $1 ${excludeVentaId ? 'AND id <> $2' : ''} LIMIT 1`,
+      ventaParams
+    );
+    if (ventaExistente.rows.length > 0) {
+      throw Object.assign(new Error(`El número de comprobante "${referencia}" ya fue usado en otra venta`), { statusCode: 409 });
+    }
+
+    const abonoParams = excludeAbonoId ? [referencia, excludeAbonoId] : [referencia];
+    const abonoExistente = await tx.query(
+      `SELECT id FROM abonos WHERE referencia = $1 ${excludeAbonoId ? 'AND id <> $2' : ''} LIMIT 1`,
+      abonoParams
+    );
+    if (abonoExistente.rows.length > 0) {
+      throw Object.assign(new Error(`El número de comprobante "${referencia}" ya fue usado en otro abono`), { statusCode: 409 });
+    }
+  }
+
   // ─────────────────────────────────────────────────────────────
   // Lectura
   // ─────────────────────────────────────────────────────────────
@@ -138,7 +164,7 @@ class SuperadminVentasService {
   // Abonos
   // ─────────────────────────────────────────────────────────────
 
-  async editarAbono(abonoId, { monto, medioPagoId }, userId) {
+  async editarAbono(abonoId, { monto, medioPagoId, referencia }, userId) {
     const tx = await beginTransaction({ usuarioId: userId, origen: 'superadmin.editarAbono' });
     try {
       const abonoRes = await tx.query(`SELECT * FROM abonos WHERE id = $1 FOR UPDATE`, [abonoId]);
@@ -163,15 +189,27 @@ class SuperadminVentasService {
         gatewayFinal = await this.getGatewayNombre(tx, medioPagoId);
       }
 
-      const notaEdicion = ` | EDITADO por superadmin ${new Date().toISOString().slice(0, 10)}: monto ${abono.monto}->${nuevoMonto}`;
+      // Comprobante: si se envía explícitamente (incluye '' para borrarlo), se actualiza.
+      let referenciaFinal = abono.referencia;
+      let cambioReferencia = false;
+      if (referencia !== undefined) {
+        const limpio = referencia === null ? null : String(referencia).trim() || null;
+        if (limpio && (gatewayFinal || '').trim().toLowerCase() !== 'efectivo') {
+          await this.verificarComprobanteUnico(tx, limpio, { excludeAbonoId: abonoId });
+        }
+        referenciaFinal = limpio;
+        cambioReferencia = true;
+      }
+
+      const notaEdicion = ` | EDITADO por superadmin ${new Date().toISOString().slice(0, 10)}: monto ${abono.monto}->${nuevoMonto}${cambioReferencia ? `, comprobante ${abono.referencia || 'N/A'}->${referenciaFinal || 'N/A'}` : ''}`;
 
       // El trigger recalc_venta_abonos recalcula abono_total y estado_venta.
       await tx.query(
         `UPDATE abonos
-         SET monto = $2, medio_pago_id = $3, gateway_pago = $4,
-             notas = COALESCE(notas, '') || $5
+         SET monto = $2, medio_pago_id = $3, gateway_pago = $4, referencia = $5,
+             notas = COALESCE(notas, '') || $6
          WHERE id = $1`,
-        [abonoId, nuevoMonto, medioFinal, gatewayFinal, notaEdicion]
+        [abonoId, nuevoMonto, medioFinal, gatewayFinal, referenciaFinal, notaEdicion]
       );
 
       // Reconciliar boletas según lo pagado.
@@ -423,6 +461,54 @@ class SuperadminVentasService {
 
       await tx.commit();
       logger.info(`[superadmin] Medio de pago de venta ${ventaId} cambiado a ${gateway} (${updAbonos.rowCount} abonos actualizados)`);
+      return this.getVentaDetalle(ventaId);
+    } catch (error) {
+      await tx.rollback();
+      throw error;
+    }
+  }
+
+  /**
+   * Editar el número de comprobante (referencia_pago) de una venta.
+   * Permite corregir errores de digitación o completar el dato si quedó vacío.
+   * No aplica el gate de "efectivo no requiere comprobante": el superadmin puede
+   * dejarlo vacío (null) en cualquier momento.
+   */
+  async editarComprobanteVenta(ventaId, referenciaPago, userId) {
+    const tx = await beginTransaction({ usuarioId: userId, origen: 'superadmin.editarComprobanteVenta' });
+    try {
+      const ventaRes = await tx.query(`SELECT id, referencia_pago, rifa_id, cliente_id FROM ventas WHERE id = $1 FOR UPDATE`, [ventaId]);
+      if (ventaRes.rows.length === 0) throw Object.assign(new Error('Venta no encontrada'), { statusCode: 404 });
+      const venta = ventaRes.rows[0];
+
+      const limpio = referenciaPago === null || referenciaPago === undefined
+        ? null
+        : String(referenciaPago).trim() || null;
+
+      if (limpio) {
+        await this.verificarComprobanteUnico(tx, limpio, { excludeVentaId: ventaId });
+      }
+
+      await tx.query(
+        `UPDATE ventas SET referencia_pago = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+        [ventaId, limpio]
+      );
+
+      await tx.query(
+        `INSERT INTO historial_movimientos
+           (entidad, accion, rifa_id, cliente_id, venta_id, usuario_id, origen, notas, metadata)
+         VALUES ('VENTA', 'EDITAR_COMPROBANTE', $1, $2, $3, historial_usuario_contexto(), historial_origen_contexto(), $4, $5::jsonb)`,
+        [
+          venta.rifa_id,
+          venta.cliente_id,
+          ventaId,
+          `Comprobante de la venta cambiado de "${venta.referencia_pago || 'N/A'}" a "${limpio || 'N/A'}"`,
+          JSON.stringify({ anterior: venta.referencia_pago, nuevo: limpio }),
+        ]
+      );
+
+      await tx.commit();
+      logger.info(`[superadmin] Comprobante de venta ${ventaId} actualizado`);
       return this.getVentaDetalle(ventaId);
     } catch (error) {
       await tx.rollback();

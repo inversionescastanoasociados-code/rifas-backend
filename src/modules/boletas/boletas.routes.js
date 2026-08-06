@@ -67,6 +67,12 @@ router.post('/batch',
   boletaController.batchCreateBoletas
 );
 
+router.get('/rifa/:rifa_id/disponibles',
+  authenticateToken,
+  validateParams(rifaIdSchema),
+  boletaController.getBoletasDisponiblesLight
+);
+
 router.get('/rifa/:rifa_id', 
   authenticateToken, 
   validateParams(rifaIdSchema), 

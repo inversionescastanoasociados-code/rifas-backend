@@ -46,6 +46,7 @@ const SQL_QUERIES = {
       v.estado_venta,
       v.medio_pago_id,
       v.gateway_pago,
+      v.referencia_pago,
       v.es_venta_online,
       v.created_at,
       v.updated_at,

@@ -392,6 +392,26 @@ class BoletaController {
     }
   }
 
+  async getBoletasDisponiblesLight(req, res) {
+    try {
+      const { rifa_id } = req.params;
+      const boletas = await boletaService.getBoletasDisponiblesLight(rifa_id);
+
+      res.json({
+        success: true,
+        message: 'Disponibles light retrieved successfully',
+        data: boletas
+      });
+    } catch (error) {
+      logger.error('Error in getBoletasDisponiblesLight controller:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error retrieving disponibles light',
+        error: error.message
+      });
+    }
+  }
+
   async getBoletasStats(req, res) {
     try {
       const { rifa_id } = req.params;

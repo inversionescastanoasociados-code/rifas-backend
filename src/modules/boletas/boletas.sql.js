@@ -47,7 +47,8 @@ const SQL_QUERIES = {
             'saldo_pendiente', v.saldo_pendiente,
             'metodo_pago', COALESCE(mp.nombre, 'N/A'),
             'estado', v.estado_venta,
-            'linea_origen', v.linea_origen
+            'linea_origen', v.linea_origen,
+            'referencia_pago', v.referencia_pago
           )
         ELSE NULL 
       END as venta_info

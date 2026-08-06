@@ -19,7 +19,12 @@ const buscarQuerySchema = Joi.object({
 const editarAbonoSchema = Joi.object({
   monto: Joi.number().positive().optional(),
   medio_pago_id: Joi.string().uuid().optional(),
+  referencia: Joi.string().trim().max(255).optional().allow('', null),
 }).min(1);
+
+const editarComprobanteVentaSchema = Joi.object({
+  referencia_pago: Joi.string().trim().max(255).allow('', null).required(),
+});
 
 const anularSchema = Joi.object({
   motivo: Joi.string().max(500).optional().allow('', null),
@@ -109,6 +114,12 @@ router.patch(
   validateParams(uuidParam('ventaId')),
   validate(reasignarClienteSchema),
   controller.reasignarCliente
+);
+router.patch(
+  '/:ventaId/comprobante',
+  validateParams(uuidParam('ventaId')),
+  validate(editarComprobanteVentaSchema),
+  controller.editarComprobanteVenta
 );
 router.delete('/:ventaId', validateParams(uuidParam('ventaId')), controller.eliminarVenta);
 

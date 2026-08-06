@@ -123,6 +123,19 @@ async function runMigrations() {
   } catch (error) {
     logger.warn('[Migrations] Error en migración 10:', error.message);
   }
+
+  // ── Migración 11: comprobante de pago único (ventas.referencia_pago / abonos.referencia) ──
+  try {
+    const sqlPath11 = path.join(
+      __dirname,
+      '../../scripts/migrations/011_comprobante_pago_unico.sql'
+    );
+    const migrationSql11 = fs.readFileSync(sqlPath11, 'utf8');
+    await pool.query(migrationSql11);
+    logger.info('[Migrations] Índices únicos de comprobante de pago verificados');
+  } catch (error) {
+    logger.warn('[Migrations] Error en migración 11:', error.message);
+  }
 }
 
 module.exports = { runMigrations };

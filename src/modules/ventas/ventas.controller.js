@@ -54,7 +54,7 @@ class VentaController {
   async convertirReserva(req, res) {
     try {
       const { id } = req.params;
-      const { monto_total, total_pagado, medio_pago_id } = req.body;
+      const { monto_total, total_pagado, medio_pago_id, referencia_pago } = req.body;
 
       if (!monto_total || monto_total <= 0) {
         return res.status(400).json({
@@ -81,6 +81,7 @@ class VentaController {
         monto_total,
         total_pagado,
         medio_pago_id,
+        referencia_pago,
         convertida_por: req.user.id,
       });
 
@@ -99,8 +100,8 @@ class VentaController {
         });
       }
 
-      if (error.message.includes('Medio de pago')) {
-        return res.status(400).json({
+      if (error.message.includes('Medio de pago') || error.message.includes('comprobante')) {
+        return res.status(error.statusCode || 400).json({
           success: false,
           message: error.message
         });
@@ -165,6 +166,12 @@ class VentaController {
       });
     } catch (error) {
       logger.error('Error in createVenta controller:', error);
+      if (error.message && error.message.includes('comprobante')) {
+        return res.status(error.statusCode || 400).json({
+          success: false,
+          message: error.message
+        });
+      }
       res.status(500).json({
         success: false,
         message: 'Error creating venta',
@@ -517,7 +524,7 @@ async buscarBoletaParaAbono(req, res) {
 async registrarAbono(req, res) {
   try {
     const { id } = req.params;
-    const { monto, metodo_pago, notas, boleta_id, boletas_abono } = req.body;
+    const { monto, metodo_pago, notas, boleta_id, boletas_abono, referencia } = req.body;
 
     if (!monto || monto <= 0) {
       return res.status(400).json({
@@ -546,7 +553,8 @@ async registrarAbono(req, res) {
         medioPagoId,
         'COP',
         req.user.id,
-        notas
+        notas,
+        referencia || null
       );
     } else {
       venta = await ventaService.registrarAbonoVenta(
@@ -556,7 +564,8 @@ async registrarAbono(req, res) {
         'COP',
         req.user.id,
         notas,
-        boleta_id || null
+        boleta_id || null,
+        referencia || null
       );
     }
 
@@ -578,9 +587,10 @@ async registrarAbono(req, res) {
     if (
       error.message === 'La venta ya está pagada' ||
       error.message === 'El monto excede el saldo pendiente' ||
-      error.message === 'La venta no tiene boletas asociadas'
+      error.message === 'La venta no tiene boletas asociadas' ||
+      (error.message && error.message.includes('comprobante'))
     ) {
-      return res.status(400).json({
+      return res.status(error.statusCode || 400).json({
         success: false,
         message: error.message
       });

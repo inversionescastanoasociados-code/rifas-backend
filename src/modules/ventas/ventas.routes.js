@@ -32,7 +32,8 @@ const createVentaSchema = Joi.object({
       monto: Joi.number().min(0).required()
     })
   ).optional(),
-  linea_origen: Joi.string().valid(...LINEAS_ORIGEN_VALIDAS).required()
+  linea_origen: Joi.string().valid(...LINEAS_ORIGEN_VALIDAS).required(),
+  referencia_pago: Joi.string().trim().max(255).optional().allow('', null)
 });
 
 const crearReservaSchema = Joi.object({
@@ -56,7 +57,8 @@ const crearReservaSchema = Joi.object({
 const convertirReservaSchema = Joi.object({
   monto_total: Joi.number().positive().required(),
   total_pagado: Joi.number().positive().required(),
-  medio_pago_id: Joi.string().uuid().required()
+  medio_pago_id: Joi.string().uuid().required(),
+  referencia_pago: Joi.string().trim().max(255).optional().allow('', null)
 });
 
 const cancelarReservaSchema = Joi.object({
@@ -275,7 +277,8 @@ const registrarAbonoSchema = Joi.object({
       boleta_id: Joi.string().uuid().required(),
       monto: Joi.number().positive().required()
     })
-  ).optional()
+  ).optional(),
+  referencia: Joi.string().trim().max(255).optional().allow('', null)
 });
 
 // IMPORTANTE: Esta ruta debe estar ANTES de la ruta genérica `/:id` (importante el orden)

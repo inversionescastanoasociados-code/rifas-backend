@@ -129,7 +129,7 @@ class PublicService {
         throw new Error('Total debe ser mayor a 0');
       }
 
-      if (Math.isNaN(total_pagado) || total_pagado < 0) {
+      if (Number.isNaN(Number(total_pagado)) || total_pagado < 0) {
         throw new Error('Total pagado inválido');
       }
 

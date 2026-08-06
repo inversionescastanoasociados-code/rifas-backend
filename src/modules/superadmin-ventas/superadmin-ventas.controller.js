@@ -28,10 +28,10 @@ class SuperadminVentasController {
 
   async editarAbono(req, res) {
     try {
-      const { monto, medio_pago_id } = req.body;
+      const { monto, medio_pago_id, referencia } = req.body;
       const data = await service.editarAbono(
         req.params.abonoId,
-        { monto, medioPagoId: medio_pago_id },
+        { monto, medioPagoId: medio_pago_id, referencia },
         req.user.id
       );
       res.status(200).json({ success: true, data });
@@ -115,6 +115,15 @@ class SuperadminVentasController {
       res.status(200).json({ success: true, data });
     } catch (error) {
       handleError(res, error, 'reasignarCliente');
+    }
+  }
+
+  async editarComprobanteVenta(req, res) {
+    try {
+      const data = await service.editarComprobanteVenta(req.params.ventaId, req.body.referencia_pago, req.user.id);
+      res.status(200).json({ success: true, data });
+    } catch (error) {
+      handleError(res, error, 'editarComprobanteVenta');
     }
   }
 
