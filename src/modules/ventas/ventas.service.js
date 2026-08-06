@@ -28,6 +28,30 @@ function esMedioEfectivo(nombreMedioPago) {
  * misma operación. Los índices únicos parciales de la migración 011 son el respaldo
  * final ante carreras entre transacciones concurrentes.
  */
+/**
+ * Traduce la violación de los índices únicos de comprobante (23505) en un error
+ * legible con statusCode 409. Solo actúa como red de seguridad ante carreras
+ * entre transacciones concurrentes; el caso normal lo cubre
+ * verificarComprobanteUnico.
+ */
+function mapErrorComprobante(error) {
+  const indicesComprobante = [
+    'idx_ventas_referencia_pago_unique',
+    'idx_abonos_referencia_unique',
+    'idx_abonos_referencia_boleta_unique',
+  ];
+  const esIndiceComprobante = error && (
+    indicesComprobante.includes(error.constraint) ||
+    indicesComprobante.some((idx) => String(error.message || '').includes(idx))
+  );
+  if (error && error.code === '23505' && esIndiceComprobante) {
+    const err = new Error('Ese número de comprobante ya fue usado en otra venta o abono');
+    err.statusCode = 409;
+    return err;
+  }
+  return error;
+}
+
 async function verificarComprobanteUnico(tx, referencia, { excludeVentaId, excludeAbonoId } = {}) {
   if (!referencia) return;
 
@@ -408,7 +432,7 @@ class VentaService {
     } catch (error) {
       await tx.rollback();
       logger.error('Error converting reserva to venta:', error);
-      throw error;
+      throw mapErrorComprobante(error);
     }
   }
 
@@ -743,7 +767,7 @@ class VentaService {
     } catch (error) {
       await tx.rollback();
       logger.error('Error creating venta:', error);
-      throw error;
+      throw mapErrorComprobante(error);
     }
   }
 
@@ -1158,7 +1182,7 @@ class VentaService {
 
   } catch (error) {
     await tx.rollback();
-    throw error;
+    throw mapErrorComprobante(error);
   }
 }
 
@@ -1288,7 +1312,7 @@ async registrarAbonoMultiBoleta(ventaId, boletasAbono, medioPagoId, moneda, user
 
   } catch (error) {
     await tx.rollback();
-    throw error;
+    throw mapErrorComprobante(error);
   }
 }
 

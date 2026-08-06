@@ -96,23 +96,42 @@ class SuperadminVentasService {
 
   /**
    * Verifica que el número de comprobante no esté ya usado en `ventas.referencia_pago`
-   * ni en `abonos.referencia` (excluyendo el propio registro que se está editando).
+   * ni en `abonos.referencia`.
+   *
+   * `excludeVentaId` excluye la venta que se está editando. `excludeAbonoId`
+   * excluye el abono que se está editando. `excludeVentaIdEnAbonos` excluye
+   * TODOS los abonos de esa venta: un mismo pago genera un abono por boleta que
+   * comparte el mismo comprobante, así que esos hermanos no son un duplicado.
    */
-  async verificarComprobanteUnico(tx, referencia, { excludeVentaId, excludeAbonoId } = {}) {
+  async verificarComprobanteUnico(tx, referencia, { excludeVentaId, excludeAbonoId, excludeVentaIdEnAbonos } = {}) {
     if (!referencia) return;
 
-    const ventaParams = excludeVentaId ? [referencia, excludeVentaId] : [referencia];
+    const ventaParams = [referencia];
+    let ventaFiltro = '';
+    if (excludeVentaId) {
+      ventaParams.push(excludeVentaId);
+      ventaFiltro = ` AND id <> $${ventaParams.length}`;
+    }
     const ventaExistente = await tx.query(
-      `SELECT id FROM ventas WHERE referencia_pago = $1 ${excludeVentaId ? 'AND id <> $2' : ''} LIMIT 1`,
+      `SELECT id FROM ventas WHERE referencia_pago = $1${ventaFiltro} LIMIT 1`,
       ventaParams
     );
     if (ventaExistente.rows.length > 0) {
       throw Object.assign(new Error(`El número de comprobante "${referencia}" ya fue usado en otra venta`), { statusCode: 409 });
     }
 
-    const abonoParams = excludeAbonoId ? [referencia, excludeAbonoId] : [referencia];
+    const abonoParams = [referencia];
+    let abonoFiltro = '';
+    if (excludeAbonoId) {
+      abonoParams.push(excludeAbonoId);
+      abonoFiltro += ` AND id <> $${abonoParams.length}`;
+    }
+    if (excludeVentaIdEnAbonos) {
+      abonoParams.push(excludeVentaIdEnAbonos);
+      abonoFiltro += ` AND venta_id <> $${abonoParams.length}`;
+    }
     const abonoExistente = await tx.query(
-      `SELECT id FROM abonos WHERE referencia = $1 ${excludeAbonoId ? 'AND id <> $2' : ''} LIMIT 1`,
+      `SELECT id FROM abonos WHERE referencia = $1${abonoFiltro} LIMIT 1`,
       abonoParams
     );
     if (abonoExistente.rows.length > 0) {
@@ -195,7 +214,11 @@ class SuperadminVentasService {
       if (referencia !== undefined) {
         const limpio = referencia === null ? null : String(referencia).trim() || null;
         if (limpio && (gatewayFinal || '').trim().toLowerCase() !== 'efectivo') {
-          await this.verificarComprobanteUnico(tx, limpio, { excludeAbonoId: abonoId });
+          await this.verificarComprobanteUnico(tx, limpio, {
+            excludeAbonoId: abonoId,
+            excludeVentaId: ventaId,
+            excludeVentaIdEnAbonos: ventaId,
+          });
         }
         referenciaFinal = limpio;
         cambioReferencia = true;
@@ -486,7 +509,10 @@ class SuperadminVentasService {
         : String(referenciaPago).trim() || null;
 
       if (limpio) {
-        await this.verificarComprobanteUnico(tx, limpio, { excludeVentaId: ventaId });
+        await this.verificarComprobanteUnico(tx, limpio, {
+          excludeVentaId: ventaId,
+          excludeVentaIdEnAbonos: ventaId,
+        });
       }
 
       await tx.query(

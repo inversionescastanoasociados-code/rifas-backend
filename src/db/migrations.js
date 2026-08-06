@@ -136,6 +136,19 @@ async function runMigrations() {
   } catch (error) {
     logger.warn('[Migrations] Error en migración 11:', error.message);
   }
+
+  // ── Migración 12: comprobante único por (referencia, boleta) en abonos ──
+  try {
+    const sqlPath12 = path.join(
+      __dirname,
+      '../../scripts/migrations/012_comprobante_abonos_por_boleta.sql'
+    );
+    const migrationSql12 = fs.readFileSync(sqlPath12, 'utf8');
+    await pool.query(migrationSql12);
+    logger.info('[Migrations] Unicidad de comprobante en abonos ajustada por boleta');
+  } catch (error) {
+    logger.warn('[Migrations] Error en migración 12:', error.message);
+  }
 }
 
 module.exports = { runMigrations };
