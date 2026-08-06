@@ -28,6 +28,7 @@ class VentaService {
       boletas,
       dias_bloqueo = 3,
       notas,
+      linea_origen,
       reservada_por
     } = reservaData;
 
@@ -128,15 +129,17 @@ class VentaService {
         estado_venta,
         notas_admin,
         vendedor_id,
+        linea_origen,
         created_at
-      ) VALUES ($1, $2, $3, 'PENDIENTE', $4, $5, CURRENT_TIMESTAMP)
+      ) VALUES ($1, $2, $3, 'PENDIENTE', $4, $5, $6, CURRENT_TIMESTAMP)
       RETURNING *`,
       [
         rifa_id,
         clienteId,
         montoTotal,
         notas || null,
-        reservada_por
+        reservada_por,
+        linea_origen
       ]
     );
 
@@ -438,7 +441,8 @@ class VentaService {
   total_pagado,
   notas,
   vendida_por,
-  abonos_por_boleta
+  abonos_por_boleta,
+  linea_origen
 } = ventaData;
 
 
@@ -526,10 +530,11 @@ class VentaService {
           medio_pago_id,
           vendedor_id,
           gateway_pago,
+          linea_origen,
           created_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)
         RETURNING *`,
-        [rifa_id, clienteId, total_venta, total_pagado || 0, estadoVenta, medioPagoId, vendida_por, gatewayPagoNombre]
+        [rifa_id, clienteId, total_venta, total_pagado || 0, estadoVenta, medioPagoId, vendida_por, gatewayPagoNombre, linea_origen]
       );
 
       const venta = ventaResult.rows[0];

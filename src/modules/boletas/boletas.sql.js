@@ -46,7 +46,8 @@ const SQL_QUERIES = {
             'total_pagado', v.abono_total,
             'saldo_pendiente', v.saldo_pendiente,
             'metodo_pago', COALESCE(mp.nombre, 'N/A'),
-            'estado', v.estado_venta
+            'estado', v.estado_venta,
+            'linea_origen', v.linea_origen
           )
         ELSE NULL 
       END as venta_info
@@ -89,6 +90,16 @@ const SQL_QUERIES = {
       AND estado = 'DISPONIBLE'
       AND (bloqueo_hasta IS NULL OR bloqueo_hasta <= CURRENT_TIMESTAMP)
     ORDER BY numero
+  `,
+
+  // Solo boletas disponibles con campos mínimos (evita descargar las 10.000 filas completas)
+  GET_BOLETAS_DISPONIBLES_LIGHT: `
+    SELECT b.id, b.numero, b.qr_url, b.barcode, b.imagen_url
+    FROM boletas b
+    WHERE b.rifa_id = $1
+      AND b.estado = 'DISPONIBLE'
+      AND (b.bloqueo_hasta IS NULL OR b.bloqueo_hasta <= CURRENT_TIMESTAMP)
+    ORDER BY b.numero
   `,
   
   GET_BOLETAS_STATS: `

@@ -22,7 +22,16 @@ const BOLETA_STATS_LATERAL = `
             0
           )
         ELSE 0 END
-      ), 0) AS deuda_total
+      ), 0) AS deuda_total,
+      COALESCE(
+        ARRAY_AGG(b.numero ORDER BY b.numero) FILTER (WHERE b.estado IN ('RESERVADA','ABONADA')),
+        ARRAY[]::integer[]
+      ) AS numeros_pendientes,
+      NULLIF(
+        STRING_AGG(DISTINCT v.linea_origen, ', ' ORDER BY v.linea_origen)
+          FILTER (WHERE b.estado IN ('RESERVADA','ABONADA') AND v.linea_origen IS NOT NULL),
+        ''
+      ) AS lineas_venta
     FROM boletas b
     JOIN rifas r ON b.rifa_id = r.id
     LEFT JOIN ventas v ON b.venta_id = v.id
@@ -363,7 +372,9 @@ class ClienteService {
           COALESCE(bs.pagadas, 0)::int AS boletas_pagadas,
           COALESCE(bs.reservadas, 0)::int AS boletas_reservadas,
           COALESCE(bs.abonadas, 0)::int AS boletas_abonadas,
-          COALESCE(bs.deuda_total, 0)::numeric AS deuda_total
+          COALESCE(bs.deuda_total, 0)::numeric AS deuda_total,
+          COALESCE(bs.numeros_pendientes, ARRAY[]::integer[]) AS numeros_pendientes,
+          bs.lineas_venta
         FROM clientes c
         ${BOLETA_STATS_LATERAL}
         ${whereClause}
@@ -430,6 +441,7 @@ class ClienteService {
           v.id AS venta_id,
           v.estado_venta,
           v.monto_total AS venta_monto_total,
+          v.linea_origen AS venta_linea_origen,
           COALESCE(
             (SELECT COUNT(*) FROM boletas WHERE venta_id = v.id),
             1
@@ -513,6 +525,7 @@ class ClienteService {
           saldo: b.estado === 'PAGADA' ? 0 : saldo,
           venta_id: b.venta_id,
           estado_venta: b.estado_venta,
+          linea_origen: b.venta_linea_origen || null,
           created_at: b.boleta_created_at
         });
         rifa.resumen.total++;

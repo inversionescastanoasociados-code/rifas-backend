@@ -5,6 +5,8 @@ const { authenticateToken, authorize } = require('../../middlewares/auth');
 const { validate, validateParams, validateQuery } = require('../../middlewares/validate');
 const Joi = require('joi');
 
+const LINEAS_ORIGEN_VALIDAS = ['1', '2', '3', '4', '5', '6', 'PISTA'];
+
 const createVentaSchema = Joi.object({
   rifa_id: Joi.string().uuid().required(),
   cliente: Joi.object({
@@ -29,7 +31,8 @@ const createVentaSchema = Joi.object({
       boleta_id: Joi.string().uuid().required(),
       monto: Joi.number().min(0).required()
     })
-  ).optional()
+  ).optional(),
+  linea_origen: Joi.string().valid(...LINEAS_ORIGEN_VALIDAS).required()
 });
 
 const crearReservaSchema = Joi.object({
@@ -46,7 +49,8 @@ const crearReservaSchema = Joi.object({
     .min(1)
     .required(),
   dias_bloqueo: Joi.number().integer().positive().default(3).max(365),
-  notas: Joi.string().optional().allow('', null).max(500)
+  notas: Joi.string().optional().allow('', null).max(500),
+  linea_origen: Joi.string().valid(...LINEAS_ORIGEN_VALIDAS).required()
 });
 
 const convertirReservaSchema = Joi.object({

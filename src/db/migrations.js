@@ -110,6 +110,19 @@ async function runMigrations() {
   } catch (error) {
     logger.warn('[Migrations] Error en migración 9:', error.message);
   }
+
+  // ── Migración 10: linea_origen en ventas ──
+  try {
+    const sqlPath10 = path.join(
+      __dirname,
+      '../../scripts/migrations/010_ventas_linea_origen.sql'
+    );
+    const migrationSql10 = fs.readFileSync(sqlPath10, 'utf8');
+    await pool.query(migrationSql10);
+    logger.info('[Migrations] ventas.linea_origen verificado');
+  } catch (error) {
+    logger.warn('[Migrations] Error en migración 10:', error.message);
+  }
 }
 
 module.exports = { runMigrations };

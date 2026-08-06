@@ -141,9 +141,19 @@ class RecordatorioService {
             COUNT(*) FILTER (WHERE ${SQL_BOLETA_RECORDATORIO}) AS crucero_boletas,
             COALESCE(SUM(
               CASE WHEN ${SQL_BOLETA_RECORDATORIO} THEN ${SQL_SALDO_BOLETA} ELSE 0 END
-            ), 0) AS deuda_total
+            ), 0) AS deuda_total,
+            COALESCE(
+              ARRAY_AGG(b.numero ORDER BY b.numero) FILTER (WHERE ${SQL_BOLETA_RECORDATORIO}),
+              ARRAY[]::integer[]
+            ) AS numeros_boletas,
+            NULLIF(
+              STRING_AGG(DISTINCT v.linea_origen, ', ' ORDER BY v.linea_origen)
+                FILTER (WHERE ${SQL_BOLETA_RECORDATORIO} AND v.linea_origen IS NOT NULL),
+              ''
+            ) AS lineas_venta
           FROM boletas b
           JOIN rifas r ON b.rifa_id = r.id
+          LEFT JOIN ventas v ON b.venta_id = v.id
           LEFT JOIN LATERAL (
             SELECT COALESCE(SUM(a.monto) FILTER (WHERE a.estado = 'CONFIRMADO'), 0) AS total_abonado
             FROM abonos a WHERE a.boleta_id = b.id
@@ -189,6 +199,8 @@ class RecordatorioService {
           COALESCE(bs.abonadas, 0)::int AS boletas_abonadas,
           COALESCE(bs.crucero_boletas, 0)::int AS boletas_crucero,
           COALESCE(bs.deuda_total, 0)::numeric AS deuda_total,
+          COALESCE(bs.numeros_boletas, ARRAY[]::integer[]) AS numeros_boletas,
+          bs.lineas_venta,
           COALESCE(ni.total_notificaciones, 0)::int AS total_notificaciones,
           ni.ultima_notificacion,
           un.ultima_linea_contacto,
