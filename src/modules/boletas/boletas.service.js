@@ -421,6 +421,24 @@ class BoletaService {
     }
   }
 
+  async searchBoletasByComprobante(rifa_id, referencia) {
+    const limpio = String(referencia || '').trim();
+    if (!limpio) {
+      return { referencia: '', matches: [] };
+    }
+
+    try {
+      const result = await query(SQL_QUERIES.SEARCH_BOLETAS_BY_COMPROBANTE, [rifa_id, limpio]);
+      return {
+        referencia: limpio,
+        matches: result.rows,
+      };
+    } catch (error) {
+      logger.error(`Error searching boletas by comprobante for rifa ${rifa_id}:`, error);
+      throw error;
+    }
+  }
+
   async sellBoleta(id, nombre_comprador, telefono, vendida_por) {
     const tx = await beginTransaction();
     

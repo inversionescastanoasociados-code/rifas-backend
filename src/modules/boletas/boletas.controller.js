@@ -452,6 +452,29 @@ class BoletaController {
     }
   }
 
+  async searchBoletasByComprobante(req, res) {
+    try {
+      const { rifa_id } = req.params;
+      const { referencia } = req.query;
+      const result = await boletaService.searchBoletasByComprobante(rifa_id, referencia);
+
+      res.json({
+        success: true,
+        message: result.matches.length
+          ? 'Boletas encontradas por comprobante'
+          : 'No se encontraron boletas con ese comprobante',
+        data: result,
+      });
+    } catch (error) {
+      logger.error('Error in searchBoletasByComprobante controller:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error buscando boletas por comprobante',
+        error: error.message,
+      });
+    }
+  }
+
   async updateBoletaNota(req, res) {
     try {
       const { id } = req.params;

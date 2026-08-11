@@ -204,6 +204,38 @@ const SQL_QUERIES = {
 
   UPDATE_BOLETA_NOTA: `
     UPDATE boletas SET nota = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING id, numero, nota
+  `,
+
+  /**
+   * Boletas de una rifa cuyo comprobante coincide en ventas.referencia_pago o abonos.referencia.
+   * Comparación exacta con y sin espacios (p. ej. "0000090300").
+   */
+  SEARCH_BOLETAS_BY_COMPROBANTE: `
+    SELECT b.id, b.numero, v.referencia_pago AS referencia, 'venta' AS origen
+    FROM boletas b
+    JOIN ventas v ON b.venta_id = v.id
+    WHERE b.rifa_id = $1
+      AND v.referencia_pago IS NOT NULL
+      AND BTRIM(v.referencia_pago) <> ''
+      AND (
+        BTRIM(v.referencia_pago) = BTRIM($2::text)
+        OR REGEXP_REPLACE(v.referencia_pago, '\\s+', '', 'g')
+           = REGEXP_REPLACE($2::text, '\\s+', '', 'g')
+      )
+    UNION
+    SELECT b.id, b.numero, a.referencia, 'abono' AS origen
+    FROM boletas b
+    JOIN abonos a ON a.boleta_id = b.id
+    WHERE b.rifa_id = $1
+      AND a.estado <> 'ANULADO'
+      AND a.referencia IS NOT NULL
+      AND BTRIM(a.referencia) <> ''
+      AND (
+        BTRIM(a.referencia) = BTRIM($2::text)
+        OR REGEXP_REPLACE(a.referencia, '\\s+', '', 'g')
+           = REGEXP_REPLACE($2::text, '\\s+', '', 'g')
+      )
+    ORDER BY numero
   `
 };
 

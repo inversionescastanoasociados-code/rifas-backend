@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const boletaController = require('./boletas.controller');
 const { authenticateToken, authorize } = require('../../middlewares/auth');
-const { validate, validateParams } = require('../../middlewares/validate');
+const { validate, validateParams, validateQuery } = require('../../middlewares/validate');
 const Joi = require('joi');
 
 const createBoletaSchema = Joi.object({
@@ -51,6 +51,10 @@ const idSchema = Joi.object({
 
 const rifaIdSchema = Joi.object({
   rifa_id: Joi.string().uuid().required()
+});
+
+const comprobanteQuerySchema = Joi.object({
+  referencia: Joi.string().trim().min(1).max(255).required(),
 });
 
 router.post('/', 
@@ -168,6 +172,13 @@ router.get('/rifa/:rifa_id/full-status',
   authenticateToken, 
   validateParams(rifaIdSchema), 
   boletaController.getBoletasFullStatus
+);
+
+router.get('/rifa/:rifa_id/by-comprobante',
+  authenticateToken,
+  validateParams(rifaIdSchema),
+  validateQuery(comprobanteQuerySchema),
+  boletaController.searchBoletasByComprobante
 );
 
 module.exports = router;
