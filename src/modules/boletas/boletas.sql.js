@@ -193,9 +193,12 @@ const SQL_QUERIES = {
       a.referencia,
       a.notas,
       a.created_at,
-      COALESCE(mp.nombre, a.gateway_pago, 'N/A') as metodo_pago
+      COALESCE(mp.nombre, a.gateway_pago, 'N/A') as metodo_pago,
+      u.nombre AS registrado_por_nombre,
+      u.rol AS registrado_por_rol
     FROM abonos a
     LEFT JOIN medios_pago mp ON a.medio_pago_id = mp.id
+    LEFT JOIN usuarios u ON u.id = a.registrado_por
     WHERE a.boleta_id = $1
       AND a.estado != 'ANULADO'
     ORDER BY a.created_at ASC
