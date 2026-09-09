@@ -17,9 +17,30 @@ const SQL_SALDO_BOLETA = `GREATEST(r.precio_boleta - COALESCE(ab.total_abonado, 
 /** Boleta pendiente que califica para recordatorio (deuda estrictamente mayor a $50.000). */
 const SQL_BOLETA_RECORDATORIO = `b.estado IN ('RESERVADA','ABONADA') AND ${SQL_SALDO_BOLETA} > ${MAX_DEUDA_EXCLUIDA}`;
 
-/** Notificaciones de contacto solo de la rifa activa (legacy sin rifa_id no cuenta). */
+/**
+ * Notificaciones de la rifa activa.
+ * Incluye registros legacy (rifa_id NULL) creados desde el inicio del proyecto activo,
+ * para que contactos guardados antes de la columna rifa_id sigan apareciendo al recargar.
+ */
 const SQL_NOTIF_RIFA_ACTIVA = `
-  nr.rifa_id IN (SELECT id FROM rifas WHERE estado = 'ACTIVA')
+  (
+    nr.rifa_id IN (SELECT id FROM rifas WHERE estado = 'ACTIVA')
+    OR (
+      nr.rifa_id IS NULL
+      AND nr.created_at >= COALESCE(
+        (SELECT MIN(created_at) FROM rifas WHERE estado = 'ACTIVA'),
+        '-infinity'::timestamptz
+      )
+      AND EXISTS (
+        SELECT 1
+        FROM boletas b
+        INNER JOIN rifas r ON r.id = b.rifa_id
+        WHERE b.cliente_id = nr.cliente_id
+          AND r.estado = 'ACTIVA'
+          AND b.estado IN ('RESERVADA', 'ABONADA')
+      )
+    )
+  )
 `;
 
 class RecordatorioService {
