@@ -376,7 +376,7 @@ const getSeguimientoClientes = async ({
   const total = parseInt(countRes.rows[0].total, 10);
 
   // ── datos paginados ─────────────────────────────────────────────────────
-  // Necesitamos los IDs de clientes de la página actual, ordenados por antigüedad
+  // Primero quien compró hace más tiempo (última compra más antigua); al final compras recientes
   p++;
   params.push(limit);
   const pLimit = p;
@@ -386,16 +386,18 @@ const getSeguimientoClientes = async ({
 
   const dataSQL = `
     ${baseCTE},
-    clientes_pagina AS (
-      SELECT DISTINCT ON (cliente_id) cliente_id, cliente_created_at
+    clientes_orden AS (
+      SELECT
+        cliente_id,
+        MAX(fecha_venta) AS ref_ultima_compra
       FROM boletas_base
       WHERE 1=1 ${notifCond}
-      ORDER BY cliente_id, cliente_created_at ASC
+      GROUP BY cliente_id
     ),
     clientes_ids AS (
-      SELECT cliente_id
-      FROM clientes_pagina
-      ORDER BY cliente_created_at ASC
+      SELECT cliente_id, ref_ultima_compra
+      FROM clientes_orden
+      ORDER BY ref_ultima_compra ASC NULLS LAST, cliente_id ASC
       LIMIT  $${pLimit}
       OFFSET $${pOffset}
     )
@@ -452,8 +454,9 @@ const getSeguimientoClientes = async ({
       bb.identificacion, bb.cliente_created_at,
       bb.total_eventos, bb.total_notificaciones, bb.ultima_notificacion,
       bb.ultima_linea_contacto, bb.ultimo_resultado,
-      bb.total_whatsapp, bb.ultimo_whatsapp
-    ORDER BY bb.cliente_created_at ASC
+      bb.total_whatsapp, bb.ultimo_whatsapp,
+      ci.ref_ultima_compra
+    ORDER BY ci.ref_ultima_compra ASC NULLS LAST, bb.nombre ASC
   
   `;
 
