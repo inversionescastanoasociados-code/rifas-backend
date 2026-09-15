@@ -333,6 +333,7 @@ const getSeguimientoClientes = async ({
         COALESCE(ab_lat.total_abonado, 0)                                       AS abono_total,
         GREATEST(r.precio_boleta - COALESCE(ab_lat.total_abonado, 0), 0)        AS saldo_pendiente,
         v.created_at      AS fecha_venta,
+        v.linea_origen    AS linea_origen,
         CASE WHEN v.es_venta_online = true THEN true ELSE false END AS es_venta_online,
         COALESCE(u.nombre, NULL)   AS vendedor_nombre,
         COALESCE(ni.total_eventos, 0)::int                                     AS total_eventos,
@@ -412,6 +413,12 @@ const getSeguimientoClientes = async ({
       bb.ultimo_resultado,
       bb.total_whatsapp,
       bb.ultimo_whatsapp,
+      NULLIF(
+        STRING_AGG(DISTINCT bb.linea_origen, ', ' ORDER BY bb.linea_origen)
+          FILTER (WHERE bb.linea_origen IS NOT NULL),
+        ''
+      ) AS lineas_venta,
+      MAX(bb.fecha_venta) AS ultima_fecha_compra,
       JSON_AGG(
         JSON_BUILD_OBJECT(
           'boleta_id',       bb.boleta_id,
@@ -424,6 +431,7 @@ const getSeguimientoClientes = async ({
           'saldo_pendiente', bb.saldo_pendiente,
           'boleta_created_at', bb.boleta_created_at,
           'fecha_venta',       bb.fecha_venta,
+          'linea_origen',      bb.linea_origen,
           'es_venta_online',   bb.es_venta_online,
           'vendedor_nombre',   bb.vendedor_nombre
         )
