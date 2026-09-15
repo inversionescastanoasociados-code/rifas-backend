@@ -203,6 +203,28 @@ const getSeguimientoClientes = async ({
   abonoMin = null,
   abonoMax = null,
 } = {}) => {
+  /** Misma lógica que módulo Recordatorios (solo lectura). */
+  const SQL_NOTIF_RIFA_ACTIVA = `
+    (
+      nr.rifa_id IN (SELECT id FROM rifas WHERE estado = 'ACTIVA')
+      OR (
+        nr.rifa_id IS NULL
+        AND nr.created_at >= COALESCE(
+          (SELECT MIN(created_at) FROM rifas WHERE estado = 'ACTIVA'),
+          '-infinity'::timestamptz
+        )
+        AND EXISTS (
+          SELECT 1
+          FROM boletas b
+          INNER JOIN rifas r ON r.id = b.rifa_id
+          WHERE b.cliente_id = nr.cliente_id
+            AND r.estado = 'ACTIVA'
+            AND b.estado IN ('RESERVADA', 'ABONADA')
+        )
+      )
+    )
+  `;
+
   const params = [];
   let p = 0;
 
@@ -268,19 +290,20 @@ const getSeguimientoClientes = async ({
   const baseCTE = `
     WITH notif_info AS (
       SELECT
-        cliente_id,
+        nr.cliente_id,
         COUNT(*)         AS total_notificaciones,
-        MAX(created_at)  AS ultima_notificacion
-      FROM notificaciones_recordatorio
-      GROUP BY cliente_id
+        MAX(nr.created_at)  AS ultima_notificacion
+      FROM notificaciones_recordatorio nr
+      WHERE ${SQL_NOTIF_RIFA_ACTIVA}
+      GROUP BY nr.cliente_id
     ),
-    contacto_info AS (
-      SELECT
-        cliente_id,
-        COUNT(*)         AS total_contactos,
-        MAX(created_at)  AS ultimo_contacto
-      FROM seguimiento_contactos
-      GROUP BY cliente_id
+    ultima_notif AS (
+      SELECT DISTINCT ON (nr.cliente_id)
+        nr.cliente_id,
+        nr.linea_contacto AS ultima_linea_contacto
+      FROM notificaciones_recordatorio nr
+      WHERE ${SQL_NOTIF_RIFA_ACTIVA}
+      ORDER BY nr.cliente_id, nr.created_at DESC
     ),
     whatsapp_info AS (
       SELECT
@@ -312,8 +335,7 @@ const getSeguimientoClientes = async ({
         COALESCE(u.nombre, NULL)   AS vendedor_nombre,
         COALESCE(ni.total_notificaciones, 0)::int                               AS total_notificaciones,
         ni.ultima_notificacion,
-        COALESCE(ci.total_contactos, 0)::int                                    AS total_contactos,
-        ci.ultimo_contacto,
+        un.ultima_linea_contacto,
         COALESCE(wi.total_whatsapp, 0)::int                                     AS total_whatsapp,
         wi.ultimo_whatsapp
       FROM clientes c
@@ -322,7 +344,7 @@ const getSeguimientoClientes = async ({
       LEFT  JOIN ventas  v            ON v.id           = b.venta_id
       LEFT  JOIN usuarios u           ON u.id           = v.vendedor_id
       LEFT  JOIN notif_info ni        ON ni.cliente_id  = c.id
-      LEFT  JOIN contacto_info ci     ON ci.cliente_id  = c.id
+      LEFT  JOIN ultima_notif un      ON un.cliente_id  = c.id
       LEFT  JOIN whatsapp_info wi     ON wi.cliente_id  = c.id
       LEFT  JOIN LATERAL (
         SELECT COALESCE(SUM(a.monto) FILTER (WHERE a.estado = 'CONFIRMADO'), 0) AS total_abonado
@@ -380,8 +402,7 @@ const getSeguimientoClientes = async ({
       bb.cliente_created_at,
       bb.total_notificaciones,
       bb.ultima_notificacion,
-      bb.total_contactos,
-      bb.ultimo_contacto,
+      bb.ultima_linea_contacto,
       bb.total_whatsapp,
       bb.ultimo_whatsapp,
       JSON_AGG(
@@ -406,8 +427,7 @@ const getSeguimientoClientes = async ({
     GROUP BY
       bb.cliente_id, bb.nombre, bb.telefono, bb.email,
       bb.identificacion, bb.cliente_created_at,
-      bb.total_notificaciones, bb.ultima_notificacion,
-      bb.total_contactos, bb.ultimo_contacto,
+      bb.total_notificaciones, bb.ultima_notificacion, bb.ultima_linea_contacto,
       bb.total_whatsapp, bb.ultimo_whatsapp
     ORDER BY bb.cliente_created_at ASC
   
