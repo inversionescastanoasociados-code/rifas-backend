@@ -10,7 +10,7 @@ const querySchema = Joi.object({
   limit: Joi.number().integer().min(1).max(100).default(20),
   search: Joi.string().optional().max(100).trim(),
   filtro: Joi.string().valid('todos', 'reservadas', 'abonadas', 'crucero').default('todos'),
-  notificado: Joi.string().valid('todos', 'si', 'no').default('todos'),
+  notificado: Joi.string().valid('todos', 'si', 'no', 'no_contesto').default('todos'),
   vendedor: Joi.string().uuid().optional()
 });
 
@@ -23,7 +23,8 @@ const clienteIdSchema = Joi.object({
 });
 
 const notificarBodySchema = Joi.object({
-  linea_contacto: Joi.number().integer().min(1).max(5).required()
+  linea_contacto: Joi.number().integer().min(1).max(5).required(),
+  resultado: Joi.string().valid('CONTACTADO', 'NO_CONTESTO').default('CONTACTADO'),
 });
 
 // GET /api/recordatorios - Listar clientes con boletas pendientes para recordatorio

@@ -73,6 +73,10 @@ class RecordatorioService {
         ALTER TABLE notificaciones_recordatorio
           ADD COLUMN IF NOT EXISTS linea_contacto SMALLINT
       `);
+      await query(`
+        ALTER TABLE notificaciones_recordatorio
+          ADD COLUMN IF NOT EXISTS resultado VARCHAR(20)
+      `);
       logger.info('Table notificaciones_recordatorio ensured');
     } catch (error) {
       logger.error('Error ensuring notificaciones_recordatorio table:', error);
@@ -198,7 +202,8 @@ class RecordatorioService {
         notif_info AS (
           SELECT 
             nr.cliente_id,
-            COUNT(*) AS total_notificaciones,
+            COUNT(*)::int AS total_eventos,
+            COUNT(*) FILTER (WHERE COALESCE(nr.resultado, 'CONTACTADO') = 'CONTACTADO')::int AS total_notificaciones,
             MAX(nr.created_at) AS ultima_notificacion
           FROM notificaciones_recordatorio nr
           WHERE ${SQL_NOTIF_RIFA_ACTIVA}
@@ -207,7 +212,8 @@ class RecordatorioService {
         ultima_notif AS (
           SELECT DISTINCT ON (nr.cliente_id)
             nr.cliente_id,
-            nr.linea_contacto AS ultima_linea_contacto
+            nr.linea_contacto AS ultima_linea_contacto,
+            COALESCE(nr.resultado, 'CONTACTADO') AS ultimo_resultado
           FROM notificaciones_recordatorio nr
           WHERE ${SQL_NOTIF_RIFA_ACTIVA}
           ORDER BY nr.cliente_id, nr.created_at DESC
@@ -225,6 +231,8 @@ class RecordatorioService {
           COALESCE(ni.total_notificaciones, 0)::int AS total_notificaciones,
           ni.ultima_notificacion,
           un.ultima_linea_contacto,
+          un.ultimo_resultado,
+          COALESCE(ni.total_eventos, 0)::int AS total_eventos,
           vi.vendedor_id,
           vi.vendedor_nombre
         FROM clientes c
@@ -234,8 +242,9 @@ class RecordatorioService {
         LEFT JOIN ultima_notif un ON un.cliente_id = c.id
         WHERE ${conditions.join(' AND ')}
         ${searchCondition}
-        ${notificado === 'si' ? 'AND ni.total_notificaciones > 0' : ''}
-        ${notificado === 'no' ? 'AND (ni.total_notificaciones IS NULL OR ni.total_notificaciones = 0)' : ''}
+        ${notificado === 'si' ? "AND un.ultimo_resultado = 'CONTACTADO'" : ''}
+        ${notificado === 'no' ? 'AND COALESCE(ni.total_eventos, 0) = 0' : ''}
+        ${notificado === 'no_contesto' ? "AND un.ultimo_resultado = 'NO_CONTESTO'" : ''}
       `;
 
       const countQuery = `
@@ -273,11 +282,16 @@ class RecordatorioService {
   /**
    * Record a notification for a client (scoped to active rifa).
    */
-  async registrarNotificacion(clienteId, userId, lineaContacto) {
+  async registrarNotificacion(clienteId, userId, lineaContacto, resultado = 'CONTACTADO') {
     try {
       const linea = Number(lineaContacto);
       if (!Number.isInteger(linea) || linea < 1 || linea > 5) {
         throw new Error('La línea de contacto debe ser un número entre 1 y 5');
+      }
+
+      const resNorm = String(resultado || 'CONTACTADO').toUpperCase();
+      if (!['CONTACTADO', 'NO_CONTESTO'].includes(resNorm)) {
+        throw new Error('Resultado inválido');
       }
 
       const rifaId = await this.getRifaActivaParaCliente(clienteId);
@@ -286,12 +300,12 @@ class RecordatorioService {
       }
 
       const result = await query(`
-        INSERT INTO notificaciones_recordatorio (cliente_id, notificado_por, rifa_id, linea_contacto)
-        VALUES ($1, $2, $3, $4)
-        RETURNING id, cliente_id, notificado_por, rifa_id, linea_contacto, created_at
-      `, [clienteId, userId, rifaId, linea]);
+        INSERT INTO notificaciones_recordatorio (cliente_id, notificado_por, rifa_id, linea_contacto, resultado)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING id, cliente_id, notificado_por, rifa_id, linea_contacto, resultado, created_at
+      `, [clienteId, userId, rifaId, linea, resNorm]);
 
-      logger.info(`Notificación registrada para cliente ${clienteId} rifa ${rifaId} línea ${linea} por usuario ${userId}`);
+      logger.info(`Notificación registrada para cliente ${clienteId} rifa ${rifaId} línea ${linea} resultado ${resNorm} por usuario ${userId}`);
       return result.rows[0];
     } catch (error) {
       logger.error('Error in registrarNotificacion:', error);
@@ -307,6 +321,7 @@ class RecordatorioService {
       const result = await query(`
         SELECT 
           nr.id, nr.created_at, nr.rifa_id, nr.linea_contacto,
+          COALESCE(nr.resultado, 'CONTACTADO') AS resultado,
           u.nombre AS notificado_por_nombre
         FROM notificaciones_recordatorio nr
         LEFT JOIN usuarios u ON nr.notificado_por = u.id

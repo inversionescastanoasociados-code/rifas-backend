@@ -189,7 +189,7 @@ const getVentasGeneral = async (
  * Filtros disponibles:
  *   search         – nombre | teléfono | número de boleta
  *   estado_boleta  – 'todas' | 'RESERVADA' | 'ABONADA' | 'PAGADA'
- *   notificado     – 'todos' | 'si' | 'no'
+ *   notificado     – 'todos' | 'si' | 'no' | 'no_contesto'
  *   rifa_id        – uuid (opcional)
  *   page / limit   – paginación
  */
@@ -291,7 +291,8 @@ const getSeguimientoClientes = async ({
     WITH notif_info AS (
       SELECT
         nr.cliente_id,
-        COUNT(*)         AS total_notificaciones,
+        COUNT(*)::int AS total_eventos,
+        COUNT(*) FILTER (WHERE COALESCE(nr.resultado, 'CONTACTADO') = 'CONTACTADO')::int AS total_notificaciones,
         MAX(nr.created_at)  AS ultima_notificacion
       FROM notificaciones_recordatorio nr
       WHERE ${SQL_NOTIF_RIFA_ACTIVA}
@@ -300,7 +301,8 @@ const getSeguimientoClientes = async ({
     ultima_notif AS (
       SELECT DISTINCT ON (nr.cliente_id)
         nr.cliente_id,
-        nr.linea_contacto AS ultima_linea_contacto
+        nr.linea_contacto AS ultima_linea_contacto,
+        COALESCE(nr.resultado, 'CONTACTADO') AS ultimo_resultado
       FROM notificaciones_recordatorio nr
       WHERE ${SQL_NOTIF_RIFA_ACTIVA}
       ORDER BY nr.cliente_id, nr.created_at DESC
@@ -333,9 +335,11 @@ const getSeguimientoClientes = async ({
         v.created_at      AS fecha_venta,
         CASE WHEN v.es_venta_online = true THEN true ELSE false END AS es_venta_online,
         COALESCE(u.nombre, NULL)   AS vendedor_nombre,
+        COALESCE(ni.total_eventos, 0)::int                                     AS total_eventos,
         COALESCE(ni.total_notificaciones, 0)::int                               AS total_notificaciones,
         ni.ultima_notificacion,
         un.ultima_linea_contacto,
+        un.ultimo_resultado,
         COALESCE(wi.total_whatsapp, 0)::int                                     AS total_whatsapp,
         wi.ultimo_whatsapp
       FROM clientes c
@@ -356,8 +360,9 @@ const getSeguimientoClientes = async ({
 
   // ── condición notificado (se aplica sobre las filas del cliente) ────────
   let notifCond = '';
-  if (notificado === 'si')  notifCond = 'AND total_notificaciones > 0';
-  if (notificado === 'no')  notifCond = 'AND total_notificaciones = 0';
+  if (notificado === 'si')  notifCond = "AND ultimo_resultado = 'CONTACTADO'";
+  if (notificado === 'no')  notifCond = 'AND COALESCE(total_eventos, 0) = 0';
+  if (notificado === 'no_contesto') notifCond = "AND ultimo_resultado = 'NO_CONTESTO'";
 
   // ── contar clientes distintos ───────────────────────────────────────────
   const countSQL = `
@@ -400,9 +405,11 @@ const getSeguimientoClientes = async ({
       bb.email,
       bb.identificacion,
       bb.cliente_created_at,
+      bb.total_eventos,
       bb.total_notificaciones,
       bb.ultima_notificacion,
       bb.ultima_linea_contacto,
+      bb.ultimo_resultado,
       bb.total_whatsapp,
       bb.ultimo_whatsapp,
       JSON_AGG(
@@ -427,7 +434,8 @@ const getSeguimientoClientes = async ({
     GROUP BY
       bb.cliente_id, bb.nombre, bb.telefono, bb.email,
       bb.identificacion, bb.cliente_created_at,
-      bb.total_notificaciones, bb.ultima_notificacion, bb.ultima_linea_contacto,
+      bb.total_eventos, bb.total_notificaciones, bb.ultima_notificacion,
+      bb.ultima_linea_contacto, bb.ultimo_resultado,
       bb.total_whatsapp, bb.ultimo_whatsapp
     ORDER BY bb.cliente_created_at ASC
   

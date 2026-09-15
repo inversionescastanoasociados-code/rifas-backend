@@ -149,6 +149,19 @@ async function runMigrations() {
   } catch (error) {
     logger.warn('[Migrations] Error en migración 12:', error.message);
   }
+
+  // ── Migración 13: resultado en notificaciones_recordatorio ──
+  try {
+    const sqlPath13 = path.join(
+      __dirname,
+      '../../scripts/migrations/013_notificaciones_resultado.sql'
+    );
+    const migrationSql13 = fs.readFileSync(sqlPath13, 'utf8');
+    await pool.query(migrationSql13);
+    logger.info('[Migrations] notificaciones_recordatorio.resultado verificado');
+  } catch (error) {
+    logger.warn('[Migrations] Error en migración 13:', error.message);
+  }
 }
 
 module.exports = { runMigrations };

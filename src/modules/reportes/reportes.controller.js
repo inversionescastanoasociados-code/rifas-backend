@@ -158,7 +158,7 @@ const getSeguimientoClientes = async (req, res) => {  try {
     const abonoMax = estadoBoleta === 'ABONADA' && !isNaN(rawMax) && rawMax >= 0 ? rawMax : null;
 
     const ESTADOS_VALIDOS   = ['todas', 'RESERVADA', 'ABONADA', 'PAGADA'];
-    const NOTIFICADO_VALIDO = ['todos', 'si', 'no'];
+    const NOTIFICADO_VALIDO = ['todos', 'si', 'no', 'no_contesto'];
 
     if (!ESTADOS_VALIDOS.includes(estadoBoleta)) {
       return res.status(400).json({ success: false, message: 'estadoBoleta inválido' });
