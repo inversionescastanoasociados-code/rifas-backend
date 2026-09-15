@@ -419,6 +419,14 @@ const getSeguimientoClientes = async ({
         ''
       ) AS lineas_venta,
       MAX(bb.fecha_venta) AS ultima_fecha_compra,
+      (
+        SELECT bb2.linea_origen
+        FROM boletas_base bb2
+        WHERE bb2.cliente_id = bb.cliente_id
+          AND bb2.fecha_venta IS NOT NULL
+        ORDER BY bb2.fecha_venta DESC
+        LIMIT 1
+      ) AS ultima_linea_compra,
       JSON_AGG(
         JSON_BUILD_OBJECT(
           'boleta_id',       bb.boleta_id,

@@ -23,7 +23,7 @@ const clienteIdSchema = Joi.object({
 });
 
 const notificarBodySchema = Joi.object({
-  linea_contacto: Joi.number().integer().min(1).max(5).required(),
+  linea_contacto: Joi.number().integer().min(1).max(6).optional(),
   resultado: Joi.string().valid('CONTACTADO', 'NO_CONTESTO').default('CONTACTADO'),
 });
 

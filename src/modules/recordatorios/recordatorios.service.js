@@ -280,13 +280,47 @@ class RecordatorioService {
   }
 
   /**
+   * Línea de la venta más reciente del cliente (rifa activa), p. ej. "3", "PISTA".
+   */
+  async getLineaOrigenUltimaCompra(clienteId) {
+    const result = await query(`
+      SELECT v.linea_origen
+      FROM boletas b
+      JOIN ventas v ON v.id = b.venta_id
+      JOIN rifas r ON r.id = b.rifa_id
+      WHERE b.cliente_id = $1
+        AND ${SQL_RIFA_ACTIVA}
+        AND v.linea_origen IS NOT NULL
+      ORDER BY v.created_at DESC
+      LIMIT 1
+    `, [clienteId]);
+    return result.rows[0]?.linea_origen || null;
+  }
+
+  /** Convierte linea_origen de venta a linea_contacto (1-6) o null (p. ej. PISTA). */
+  lineaOrigenANumero(lineaOrigen) {
+    if (!lineaOrigen) return null;
+    const raw = String(lineaOrigen).trim().toUpperCase();
+    if (raw === 'PISTA') return null;
+    const n = parseInt(raw, 10);
+    if (Number.isInteger(n) && n >= 1 && n <= 6) return n;
+    return null;
+  }
+
+  /**
    * Record a notification for a client (scoped to active rifa).
+   * Si no se envía linea_contacto, se usa la línea de la última compra (venta).
    */
   async registrarNotificacion(clienteId, userId, lineaContacto, resultado = 'CONTACTADO') {
     try {
-      const linea = Number(lineaContacto);
-      if (!Number.isInteger(linea) || linea < 1 || linea > 5) {
-        throw new Error('La línea de contacto debe ser un número entre 1 y 5');
+      let linea = null;
+      if (lineaContacto !== undefined && lineaContacto !== null && lineaContacto !== '') {
+        linea = Number(lineaContacto);
+        if (!Number.isInteger(linea) || linea < 1 || linea > 6) {
+          throw new Error('La línea debe ser un número entre 1 y 6');
+        }
+      } else {
+        linea = this.lineaOrigenANumero(await this.getLineaOrigenUltimaCompra(clienteId));
       }
 
       const resNorm = String(resultado || 'CONTACTADO').toUpperCase();

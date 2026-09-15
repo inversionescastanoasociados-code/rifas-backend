@@ -162,6 +162,19 @@ async function runMigrations() {
   } catch (error) {
     logger.warn('[Migrations] Error en migración 13:', error.message);
   }
+
+  // ── Migración 14: linea_contacto 1-6 en notificaciones ──
+  try {
+    const sqlPath14 = path.join(
+      __dirname,
+      '../../scripts/migrations/014_notificaciones_linea_hasta_6.sql'
+    );
+    const migrationSql14 = fs.readFileSync(sqlPath14, 'utf8');
+    await pool.query(migrationSql14);
+    logger.info('[Migrations] notificaciones_recordatorio linea 1-6 verificado');
+  } catch (error) {
+    logger.warn('[Migrations] Error en migración 14:', error.message);
+  }
 }
 
 module.exports = { runMigrations };
