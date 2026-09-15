@@ -24,6 +24,7 @@ const sistemaRoutes = require('./modules/sistema/sistema.routes');
 const historialRoutes = require('./modules/historial/historial.routes');
 const superadminVentasRoutes = require('./modules/superadmin-ventas/superadmin-ventas.routes');
 const preasignacionesRoutes = require('./modules/preasignaciones/preasignaciones.routes');
+const adminUsuariosRoutes = require('./modules/admin-usuarios/admin-usuarios.routes');
 const { bloqueoPausa } = require('./middlewares/bloqueoPausa');
 
 const app = express();
@@ -98,6 +99,7 @@ app.use('/api/sistema', sistemaRoutes);
 app.use('/api/historial', historialRoutes);
 app.use('/api/superadmin/ventas', superadminVentasRoutes);
 app.use('/api/preasignaciones', preasignacionesRoutes);
+app.use('/api/superadmin/admins', adminUsuariosRoutes);
 
 // Servir imágenes: primero intenta filesystem, luego fallback a DB
 const { servirImagen } = require('./modules/uploads/uploads.controller');
