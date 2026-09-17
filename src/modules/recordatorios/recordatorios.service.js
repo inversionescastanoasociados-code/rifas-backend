@@ -77,6 +77,10 @@ class RecordatorioService {
         ALTER TABLE notificaciones_recordatorio
           ADD COLUMN IF NOT EXISTS resultado VARCHAR(20)
       `);
+      await query(`
+        ALTER TABLE notificaciones_recordatorio
+          ADD COLUMN IF NOT EXISTS observacion TEXT
+      `);
       logger.info('Table notificaciones_recordatorio ensured');
     } catch (error) {
       logger.error('Error ensuring notificaciones_recordatorio table:', error);
@@ -311,7 +315,7 @@ class RecordatorioService {
    * Record a notification for a client (scoped to active rifa).
    * Si no se envía linea_contacto, se usa la línea de la última compra (venta).
    */
-  async registrarNotificacion(clienteId, userId, lineaContacto, resultado = 'CONTACTADO') {
+  async registrarNotificacion(clienteId, userId, lineaContacto, resultado = 'CONTACTADO', observacion = null) {
     try {
       let linea = null;
       if (lineaContacto !== undefined && lineaContacto !== null && lineaContacto !== '') {
@@ -328,16 +332,24 @@ class RecordatorioService {
         throw new Error('Resultado inválido');
       }
 
+      let obs = null;
+      if (observacion != null && String(observacion).trim() !== '') {
+        obs = String(observacion).trim();
+        if (obs.length > 2000) {
+          throw new Error('La observación no puede superar 2000 caracteres');
+        }
+      }
+
       const rifaId = await this.getRifaActivaParaCliente(clienteId);
       if (!rifaId) {
         throw new Error('No hay rifa activa para registrar el contacto');
       }
 
       const result = await query(`
-        INSERT INTO notificaciones_recordatorio (cliente_id, notificado_por, rifa_id, linea_contacto, resultado)
-        VALUES ($1, $2, $3, $4, $5)
-        RETURNING id, cliente_id, notificado_por, rifa_id, linea_contacto, resultado, created_at
-      `, [clienteId, userId, rifaId, linea, resNorm]);
+        INSERT INTO notificaciones_recordatorio (cliente_id, notificado_por, rifa_id, linea_contacto, resultado, observacion)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING id, cliente_id, notificado_por, rifa_id, linea_contacto, resultado, observacion, created_at
+      `, [clienteId, userId, rifaId, linea, resNorm, obs]);
 
       logger.info(`Notificación registrada para cliente ${clienteId} rifa ${rifaId} línea ${linea} resultado ${resNorm} por usuario ${userId}`);
       return result.rows[0];
@@ -356,6 +368,7 @@ class RecordatorioService {
         SELECT 
           nr.id, nr.created_at, nr.rifa_id, nr.linea_contacto,
           COALESCE(nr.resultado, 'CONTACTADO') AS resultado,
+          nr.observacion,
           u.nombre AS notificado_por_nombre
         FROM notificaciones_recordatorio nr
         LEFT JOIN usuarios u ON nr.notificado_por = u.id
