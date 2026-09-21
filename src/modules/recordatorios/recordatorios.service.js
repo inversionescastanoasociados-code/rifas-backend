@@ -301,13 +301,13 @@ class RecordatorioService {
     return result.rows[0]?.linea_origen || null;
   }
 
-  /** Convierte linea_origen de venta a linea_contacto (1-6) o null (p. ej. PISTA). */
+  /** Convierte linea_origen de venta a linea_contacto (1-7) o null (p. ej. PISTA). */
   lineaOrigenANumero(lineaOrigen) {
     if (!lineaOrigen) return null;
     const raw = String(lineaOrigen).trim().toUpperCase();
     if (raw === 'PISTA') return null;
     const n = parseInt(raw, 10);
-    if (Number.isInteger(n) && n >= 1 && n <= 6) return n;
+    if (Number.isInteger(n) && n >= 1 && n <= 7) return n;
     return null;
   }
 
@@ -320,8 +320,8 @@ class RecordatorioService {
       let linea = null;
       if (lineaContacto !== undefined && lineaContacto !== null && lineaContacto !== '') {
         linea = Number(lineaContacto);
-        if (!Number.isInteger(linea) || linea < 1 || linea > 6) {
-          throw new Error('La línea debe ser un número entre 1 y 6');
+        if (!Number.isInteger(linea) || linea < 1 || linea > 7) {
+          throw new Error('La línea debe ser un número entre 1 y 7');
         }
       } else {
         linea = this.lineaOrigenANumero(await this.getLineaOrigenUltimaCompra(clienteId));

@@ -5,7 +5,7 @@ const { authenticateToken, authorize } = require('../../middlewares/auth');
 const { validate, validateParams, validateQuery } = require('../../middlewares/validate');
 const Joi = require('joi');
 
-const LINEAS_ORIGEN_VALIDAS = ['1', '2', '3', '4', '5', '6', 'PISTA'];
+const LINEAS_ORIGEN_VALIDAS = ['1', '2', '3', '4', '5', '6', '7', 'PISTA'];
 
 const createVentaSchema = Joi.object({
   rifa_id: Joi.string().uuid().required(),

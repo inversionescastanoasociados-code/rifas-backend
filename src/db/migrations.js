@@ -188,6 +188,19 @@ async function runMigrations() {
   } catch (error) {
     logger.warn('[Migrations] Error en migración 15:', error.message);
   }
+
+  // ── Migración 16: línea 7 en ventas y notificaciones ──
+  try {
+    const sqlPath16 = path.join(
+      __dirname,
+      '../../scripts/migrations/016_ventas_linea_7.sql'
+    );
+    const migrationSql16 = fs.readFileSync(sqlPath16, 'utf8');
+    await pool.query(migrationSql16);
+    logger.info('[Migrations] ventas/notificaciones línea 7 verificado');
+  } catch (error) {
+    logger.warn('[Migrations] Error en migración 16:', error.message);
+  }
 }
 
 module.exports = { runMigrations };
