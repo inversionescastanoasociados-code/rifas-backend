@@ -267,16 +267,20 @@ const SQL_QUERIES = {
       b.estado,
       b.es_devolucion,
       b.devolucion_en,
+      b.cliente_id,
       b.updated_at AS boleta_updated_at,
+      c.nombre AS cliente_nombre,
+      c.telefono AS cliente_telefono,
       r.id AS rifa_id,
       r.nombre AS rifa_nombre,
       r.precio_boleta,
-      r.fecha_sorteo
+      r.fecha_sorteo,
+      (b.es_devolucion = true AND b.estado = 'DISPONIBLE' AND b.cliente_id IS NULL) AS disponible_publicacion
     FROM boletas b
     JOIN rifas r ON b.rifa_id = r.id
-    WHERE b.es_devolucion = true
-      AND b.estado = 'DISPONIBLE'
-    ORDER BY b.devolucion_en DESC NULLS LAST, b.numero ASC
+    LEFT JOIN clientes c ON c.id = b.cliente_id
+    WHERE b.devolucion_en IS NOT NULL
+    ORDER BY disponible_publicacion DESC, b.devolucion_en DESC NULLS LAST, b.numero ASC
   `,
 
   // Recalcular monto_total/estado_venta de una venta según las boletas que

@@ -214,6 +214,19 @@ async function runMigrations() {
   } catch (error) {
     logger.warn('[Migrations] Error en migración 17:', error.message);
   }
+
+  // ── Migración 18: historial devolución (conservar devolucion_en) ──
+  try {
+    const sqlPath18 = path.join(
+      __dirname,
+      '../../scripts/migrations/018_boletas_devolucion_historial.sql'
+    );
+    const migrationSql18 = fs.readFileSync(sqlPath18, 'utf8');
+    await pool.query(migrationSql18);
+    logger.info('[Migrations] trigger devolución historial verificado');
+  } catch (error) {
+    logger.warn('[Migrations] Error en migración 18:', error.message);
+  }
 }
 
 module.exports = { runMigrations };
