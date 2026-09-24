@@ -34,7 +34,8 @@ const SQL_QUERIES = {
             'nombre', COALESCE(c.nombre, vc.nombre),
             'telefono', COALESCE(c.telefono, vc.telefono),
             'email', COALESCE(c.email, vc.email),
-            'identificacion', COALESCE(c.identificacion, vc.identificacion)
+            'identificacion', COALESCE(c.identificacion, vc.identificacion),
+            'direccion', COALESCE(NULLIF(BTRIM(c.direccion), ''), NULLIF(BTRIM(vc.direccion), ''))
           )
         ELSE NULL 
       END as cliente_info,
