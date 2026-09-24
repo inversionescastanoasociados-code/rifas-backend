@@ -243,7 +243,7 @@ const SQL_QUERIES = {
     ORDER BY b.bloqueo_hasta ASC NULLS LAST
   `,
 
-  // LIBERAR BOLETAS MANUALMENTE (admin)
+  // LIBERAR BOLETAS MANUALMENTE (admin) — $2 = marcar como devolución
   LIBERAR_BOLETA_MANUAL: `
     UPDATE boletas
     SET estado = 'DISPONIBLE',
@@ -252,10 +252,31 @@ const SQL_QUERIES = {
         venta_id = NULL,
         reserva_token = NULL,
         bloqueo_hasta = NULL,
+        es_devolucion = COALESCE($2::boolean, false),
+        devolucion_en = CASE WHEN COALESCE($2::boolean, false) THEN CURRENT_TIMESTAMP ELSE NULL END,
         updated_at = CURRENT_TIMESTAMP
     WHERE id = $1
       AND estado = 'RESERVADA'
-    RETURNING id, numero, rifa_id
+    RETURNING id, numero, rifa_id, es_devolucion, devolucion_en
+  `,
+
+  GET_BOLETAS_DEVUELTAS: `
+    SELECT
+      b.id AS boleta_id,
+      b.numero,
+      b.estado,
+      b.es_devolucion,
+      b.devolucion_en,
+      b.updated_at AS boleta_updated_at,
+      r.id AS rifa_id,
+      r.nombre AS rifa_nombre,
+      r.precio_boleta,
+      r.fecha_sorteo
+    FROM boletas b
+    JOIN rifas r ON b.rifa_id = r.id
+    WHERE b.es_devolucion = true
+      AND b.estado = 'DISPONIBLE'
+    ORDER BY b.devolucion_en DESC NULLS LAST, b.numero ASC
   `,
 
   // Recalcular monto_total/estado_venta de una venta según las boletas que
@@ -290,7 +311,7 @@ const SQL_QUERIES = {
     RETURNING v.id, v.monto_total, v.abono_total, v.saldo_pendiente, v.estado_venta
   `,
 
-  // LIBERAR TODAS LAS BOLETAS DE UNA VENTA
+  // LIBERAR TODAS LAS BOLETAS DE UNA VENTA — $2 = marcar como devolución
   LIBERAR_BOLETAS_DE_VENTA: `
     UPDATE boletas
     SET estado = 'DISPONIBLE',
@@ -299,10 +320,12 @@ const SQL_QUERIES = {
         venta_id = NULL,
         reserva_token = NULL,
         bloqueo_hasta = NULL,
+        es_devolucion = COALESCE($2::boolean, false),
+        devolucion_en = CASE WHEN COALESCE($2::boolean, false) THEN CURRENT_TIMESTAMP ELSE NULL END,
         updated_at = CURRENT_TIMESTAMP
     WHERE venta_id = $1
       AND estado = 'RESERVADA'
-    RETURNING id, numero
+    RETURNING id, numero, es_devolucion
   `,
 
   // CANCELAR VENTA ASOCIADA al liberar boletas

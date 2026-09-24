@@ -278,6 +278,23 @@ class PublicDashboardController {
     }
   }
 
+  async getBoletasDevueltas(req, res) {
+    try {
+      const boletas = await dashboardService.getBoletasDevueltas();
+      return res.json({
+        success: true,
+        data: boletas,
+        count: boletas.length
+      });
+    } catch (error) {
+      logger.error('Error en getBoletasDevueltas:', error);
+      return res.status(500).json({
+        success: false,
+        message: error.message || 'Error obteniendo boletas devueltas'
+      });
+    }
+  }
+
   /**
    * POST /api/admin/dashboard/boletas-reservadas/:boletaId/liberar
    * 🔓 Liberar manualmente una boleta reservada
@@ -285,7 +302,8 @@ class PublicDashboardController {
   async liberarBoleta(req, res) {
     try {
       const { boletaId } = req.params;
-      const resultado = await dashboardService.liberarBoletaManual(boletaId, req.user?.id);
+      const es_devolucion = req.body?.es_devolucion === true;
+      const resultado = await dashboardService.liberarBoletaManual(boletaId, req.user?.id, { es_devolucion });
       return res.json({
         success: true,
         message: `Boleta #${resultado.numero} liberada exitosamente`,
@@ -307,7 +325,8 @@ class PublicDashboardController {
   async liberarBoletasDeVenta(req, res) {
     try {
       const { ventaId } = req.params;
-      const resultado = await dashboardService.liberarBoletasDeVenta(ventaId, req.user?.id);
+      const es_devolucion = req.body?.es_devolucion === true;
+      const resultado = await dashboardService.liberarBoletasDeVenta(ventaId, req.user?.id, { es_devolucion });
       return res.json({
         success: true,
         message: `${resultado.boletas_liberadas} boletas liberadas exitosamente`,

@@ -432,9 +432,23 @@ class PublicDashboardService {
   }
 
   /**
+   * Boletas liberadas marcadas como devolución (siguen DISPONIBLE para nueva venta).
+   */
+  async getBoletasDevueltas() {
+    try {
+      const result = await query(SQL_QUERIES.GET_BOLETAS_DEVUELTAS);
+      logger.info(`Obtenidas ${result.rows.length} boletas devueltas`);
+      return result.rows;
+    } catch (error) {
+      logger.error('Error obteniendo boletas devueltas:', error);
+      throw error;
+    }
+  }
+
+  /**
    * 🔓 Liberar una boleta reservada manualmente
    */
-  async liberarBoletaManual(boletaId, liberadoPor = null) {
+  async liberarBoletaManual(boletaId, liberadoPor = null, { es_devolucion = false } = {}) {
     const tx = await beginTransaction({
       usuarioId: liberadoPor,
       origen: 'dashboard.liberarBoletaManual',
@@ -449,7 +463,7 @@ class PublicDashboardService {
       const ventaOrigenId = ventaOrigenResult.rows[0]?.venta_id || null;
 
       // Liberar la boleta
-      const result = await tx.query(SQL_QUERIES.LIBERAR_BOLETA_MANUAL, [boletaId]);
+      const result = await tx.query(SQL_QUERIES.LIBERAR_BOLETA_MANUAL, [boletaId, !!es_devolucion]);
       
       if (result.rows.length === 0) {
         throw new Error('Boleta no encontrada o no está en estado RESERVADA');
@@ -486,14 +500,14 @@ class PublicDashboardService {
   /**
    * 🔓 Liberar TODAS las boletas de una venta y cancelar la venta
    */
-  async liberarBoletasDeVenta(ventaId, liberadoPor = null) {
+  async liberarBoletasDeVenta(ventaId, liberadoPor = null, { es_devolucion = false } = {}) {
     const tx = await beginTransaction({
       usuarioId: liberadoPor,
       origen: 'dashboard.liberarBoletasDeVenta',
     });
     try {
       // Liberar boletas
-      const boletas = await tx.query(SQL_QUERIES.LIBERAR_BOLETAS_DE_VENTA, [ventaId]);
+      const boletas = await tx.query(SQL_QUERIES.LIBERAR_BOLETAS_DE_VENTA, [ventaId, !!es_devolucion]);
 
       if (boletas.rows.length === 0) {
         throw new Error('No se encontraron boletas reservadas para esta venta');

@@ -36,6 +36,12 @@ router.get('/ventas-publicas/sin-revisar', dashboardController.getVentasSinRevis
 router.get('/boletas-reservadas', dashboardController.getBoletasReservadas);
 
 /**
+ * 🔄 GET /api/admin/dashboard/boletas-devueltas
+ * Boletas disponibles marcadas como devolución al liberar
+ */
+router.get('/boletas-devueltas', dashboardController.getBoletasDevueltas);
+
+/**
  * 🔓 POST /api/admin/dashboard/boletas-reservadas/:boletaId/liberar
  * Liberar manualmente una boleta reservada
  */

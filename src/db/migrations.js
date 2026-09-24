@@ -201,6 +201,19 @@ async function runMigrations() {
   } catch (error) {
     logger.warn('[Migrations] Error en migración 16:', error.message);
   }
+
+  // ── Migración 17: etiqueta devolución en boletas ──
+  try {
+    const sqlPath17 = path.join(
+      __dirname,
+      '../../scripts/migrations/017_boletas_devolucion.sql'
+    );
+    const migrationSql17 = fs.readFileSync(sqlPath17, 'utf8');
+    await pool.query(migrationSql17);
+    logger.info('[Migrations] boletas.es_devolucion verificado');
+  } catch (error) {
+    logger.warn('[Migrations] Error en migración 17:', error.message);
+  }
 }
 
 module.exports = { runMigrations };
