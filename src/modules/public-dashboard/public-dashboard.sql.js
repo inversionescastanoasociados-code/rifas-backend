@@ -239,8 +239,8 @@ const SQL_QUERIES = {
     JOIN rifas r ON b.rifa_id = r.id
     LEFT JOIN clientes c ON b.cliente_id = c.id
     LEFT JOIN ventas v ON b.venta_id = v.id
-    WHERE b.estado = 'RESERVADA'
-    ORDER BY b.bloqueo_hasta ASC NULLS LAST
+    WHERE b.estado IN ('RESERVADA', 'ABONADA')
+    ORDER BY b.bloqueo_hasta ASC NULLS LAST, b.numero ASC
   `,
 
   // LIBERAR BOLETAS MANUALMENTE (admin) — $2 = marcar como devolución
