@@ -524,7 +524,7 @@ async buscarBoletaParaAbono(req, res) {
 async registrarAbono(req, res) {
   try {
     const { id } = req.params;
-    const { monto, metodo_pago, notas, boleta_id, boletas_abono, referencia } = req.body;
+    const { monto, metodo_pago, notas, boleta_id, boletas_abono, referencia, linea_origen } = req.body;
 
     if (!monto || monto <= 0) {
       return res.status(400).json({
@@ -554,7 +554,8 @@ async registrarAbono(req, res) {
         'COP',
         req.user.id,
         notas,
-        referencia || null
+        referencia || null,
+        linea_origen
       );
     } else {
       venta = await ventaService.registrarAbonoVenta(
@@ -565,7 +566,8 @@ async registrarAbono(req, res) {
         req.user.id,
         notas,
         boleta_id || null,
-        referencia || null
+        referencia || null,
+        linea_origen
       );
     }
 
@@ -588,7 +590,8 @@ async registrarAbono(req, res) {
       error.message === 'La venta ya está pagada' ||
       error.message === 'El monto excede el saldo pendiente' ||
       error.message === 'La venta no tiene boletas asociadas' ||
-      (error.message && error.message.includes('comprobante'))
+      (error.message && error.message.includes('comprobante')) ||
+      (error.message && error.message.includes('línea o pista'))
     ) {
       return res.status(error.statusCode || 400).json({
         success: false,

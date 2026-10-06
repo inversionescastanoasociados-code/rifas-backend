@@ -26,6 +26,20 @@ const RESERVA_EXPIRACION_HORAS = 72;    // Fallback si no hay fecha_sorteo
 const MAX_BOLETAS_POR_RESERVA = 20;     // Máximo boletas que se pueden reservar de golpe
 const MIN_BOLETAS_POR_RESERVA = 1;
 
+/** Campos de boleta que la web pública usa para renderizar / descargar el ticket */
+function mapBoletaPublica(row) {
+  return {
+    id: row.id,
+    numero: row.numero,
+    estado: row.estado,
+    qr_url: row.qr_url || null,
+    barcode: row.barcode || null,
+    imagen_url: row.imagen_url || null,
+    bloqueo_hasta: row.bloqueo_hasta || null,
+    nota: row.nota || null,
+  };
+}
+
 class VentasOnlineService {
 
   // ═══════════════════════════════════════
@@ -134,10 +148,7 @@ class VentasOnlineService {
         reserva_token: reservaToken,
         bloqueo_hasta: bloqueoHasta,
         tiempo_bloqueo_minutos: tiempo,
-        boletas: result.rows.map(r => ({
-          id: r.id,
-          numero: r.numero
-        }))
+        boletas: result.rows.map((r) => mapBoletaPublica(r))
       };
 
     } catch (error) {
@@ -346,11 +357,13 @@ class VentasOnlineService {
         venta_id: venta.id,
         estado: 'SIN_REVISAR',
         monto_total: montoTotal,
-        boletas: boletasAsignadas.rows.map(b => b.numero),
+        boletas: boletasAsignadas.rows.map((b) => b.numero),
+        boletas_detalle: boletasAsignadas.rows.map((b) => mapBoletaPublica(b)),
         cantidad_boletas: cantidadBoletas,
         rifa: rifaResult.rows[0].nombre,
         precio_boleta: precioBoleta,
         cliente_nombre: cliente.nombre.trim(),
+        cliente_identificacion: cliente.identificacion ? cliente.identificacion.trim() : null,
         expires_at: expiresAt,
         mensaje: `Reserva creada exitosamente. Para participar en los premios anticipados: mínimo $90.000 abonados todos los sábados por $2.000.000 acumulables. Premio mayor el 20 de junio: boleta pagada al 100%.`,
         instrucciones: [
@@ -395,6 +408,7 @@ class VentasOnlineService {
         premio: reserva.premio_principal,
         fecha_sorteo: reserva.fecha_sorteo,
         cliente: reserva.cliente_nombre,
+        cliente_identificacion: reserva.cliente_identificacion || null,
         boletas: reserva.boletas,
         created_at: reserva.created_at
       };
@@ -477,10 +491,15 @@ class VentasOnlineService {
           const saldoPendienteBoleta = Math.max(precioBoleta - totalPagadoBoleta, 0);
 
           boletasConAbonos.push({
+            id: boleta.id || boleta.boleta_id,
             numero: boleta.numero,
             estado: boleta.estado,
             qr_hash: boleta.qr_hash,
             qr_url: boleta.qr_url,
+            barcode: boleta.barcode || null,
+            imagen_url: boleta.imagen_url || null,
+            bloqueo_hasta: boleta.bloqueo_hasta || null,
+            nota: boleta.nota || null,
             precio_boleta: precioBoleta,
             total_pagado_boleta: totalPagadoBoleta,
             saldo_pendiente_boleta: saldoPendienteBoleta,

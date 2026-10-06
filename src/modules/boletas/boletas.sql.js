@@ -193,6 +193,7 @@ const SQL_QUERIES = {
       a.estado,
       a.referencia,
       a.notas,
+      a.linea_origen,
       a.created_at,
       COALESCE(mp.nombre, a.gateway_pago, 'N/A') as metodo_pago,
       u.nombre AS registrado_por_nombre,

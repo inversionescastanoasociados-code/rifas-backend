@@ -227,6 +227,19 @@ async function runMigrations() {
   } catch (error) {
     logger.warn('[Migrations] Error en migración 18:', error.message);
   }
+
+  // ── Migración 19: linea_origen en abonos ──
+  try {
+    const sqlPath19 = path.join(
+      __dirname,
+      '../../scripts/migrations/019_abonos_linea_origen.sql'
+    );
+    const migrationSql19 = fs.readFileSync(sqlPath19, 'utf8');
+    await pool.query(migrationSql19);
+    logger.info('[Migrations] abonos.linea_origen verificado');
+  } catch (error) {
+    logger.warn('[Migrations] Error en migración 19:', error.message);
+  }
 }
 
 module.exports = { runMigrations };

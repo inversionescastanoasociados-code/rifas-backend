@@ -85,6 +85,7 @@ class BoletaService {
         referencia: a.referencia,
         metodo_pago: a.metodo_pago,
         notas: a.notas,
+        linea_origen: a.linea_origen || null,
         fecha: a.created_at,
         registrado_por_nombre: a.registrado_por_nombre || null,
         registrado_por_rol: a.registrado_por_rol || null,

@@ -6,9 +6,8 @@ const logger = require('../../utils/logger');
 /**
  * Comprobante de pago (referencia_pago en ventas, referencia en abonos).
  * Reglas:
- *  - "Efectivo" NO requiere comprobante (se guarda como NULL).
- *  - Cualquier otro medio de pago (PSE, Nequi, Tarjeta, transferencia, etc.)
- *    SÍ requiere un número de comprobante.
+ *  - "Efectivo" y "PSE" NO requieren comprobante (se guarda como NULL).
+ *  - Otros medios (Nequi, Tarjeta, etc.) SÍ requieren número de comprobante.
  *  - El número debe ser único: no puede repetirse ni entre ventas ni entre abonos.
  */
 function normalizarReferencia(valor) {
@@ -19,6 +18,29 @@ function normalizarReferencia(valor) {
 
 function esMedioEfectivo(nombreMedioPago) {
   return (nombreMedioPago || '').trim().toLowerCase() === 'efectivo';
+}
+
+function esMedioPSE(nombreMedioPago) {
+  return (nombreMedioPago || '').trim().toLowerCase() === 'pse';
+}
+
+function requiereComprobantePago(nombreMedioPago) {
+  return !esMedioEfectivo(nombreMedioPago) && !esMedioPSE(nombreMedioPago);
+}
+
+function resolverReferenciaPago(nombreMedioPago, referenciaRaw) {
+  if (!requiereComprobantePago(nombreMedioPago)) return null;
+  return normalizarReferencia(referenciaRaw);
+}
+
+const LINEAS_ORIGEN_ABONO = new Set(['1', '2', '3', '4', '5', '6', '7', 'PISTA']);
+
+function validarLineaOrigenAbono(lineaOrigen) {
+  const v = lineaOrigen != null ? String(lineaOrigen).trim() : '';
+  if (!LINEAS_ORIGEN_ABONO.has(v)) {
+    throw new Error('Seleccione la línea o pista (punto físico) donde se hizo el abono');
+  }
+  return v;
 }
 
 /**
@@ -321,8 +343,8 @@ class VentaService {
       const gatewayPagoNombre = medioPagoCheck.rows[0].nombre || null;
 
       // 🔹 3.5️⃣ Comprobante de pago (obligatorio si NO es efectivo, único en todo el sistema)
-      const referenciaPagoFinal = esMedioEfectivo(gatewayPagoNombre) ? null : normalizarReferencia(referencia_pago);
-      if (!esMedioEfectivo(gatewayPagoNombre) && total_pagado > 0 && !referenciaPagoFinal) {
+      const referenciaPagoFinal = resolverReferenciaPago(gatewayPagoNombre, referencia_pago);
+      if (requiereComprobantePago(gatewayPagoNombre) && total_pagado > 0 && !referenciaPagoFinal) {
         throw new Error(`Ingresa el número de comprobante del pago por ${gatewayPagoNombre}`);
       }
       if (referenciaPagoFinal) {
@@ -356,6 +378,8 @@ class VentaService {
       // 🔹 6️⃣ Crear ABONOS por cada boleta
       const montoPorBoleta = total_pagado / cantidadBoletas;
 
+      const lineaOrigenVenta = venta.linea_origen || null;
+
       for (const boleta of boletas) {
         await tx.query(
           `INSERT INTO abonos (
@@ -369,8 +393,9 @@ class VentaService {
             moneda,
             registrado_por,
             notas,
+            linea_origen,
             created_at
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP)`,
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP)`,
           [
             ventaId,
             boleta.id,
@@ -380,8 +405,9 @@ class VentaService {
             gatewayPagoNombre,
             referenciaPagoFinal,
             'COP',
-            venta.vendida_por,
-            esAbono ? 'Abono inicial (convertida de reserva)' : 'Pago completo (convertida de reserva)'
+            venta.vendedor_id,
+            esAbono ? 'Abono inicial (convertida de reserva)' : 'Pago completo (convertida de reserva)',
+            lineaOrigenVenta
           ]
         );
       }
@@ -579,8 +605,8 @@ class VentaService {
       const gatewayPagoNombre = medioPagoCheck.rows[0].nombre || null;
 
       // 🔹 3.6️⃣ Comprobante de pago (obligatorio si NO es efectivo, único en todo el sistema)
-      const referenciaPagoFinal = esMedioEfectivo(gatewayPagoNombre) ? null : normalizarReferencia(referencia_pago);
-      if (!esMedioEfectivo(gatewayPagoNombre) && total_pagado > 0 && !referenciaPagoFinal) {
+      const referenciaPagoFinal = resolverReferenciaPago(gatewayPagoNombre, referencia_pago);
+      if (requiereComprobantePago(gatewayPagoNombre) && total_pagado > 0 && !referenciaPagoFinal) {
         throw new Error(`Ingresa el número de comprobante del pago por ${gatewayPagoNombre}`);
       }
       if (referenciaPagoFinal) {
@@ -691,8 +717,9 @@ class VentaService {
               moneda,
               estado,
               notas,
+              linea_origen,
               created_at
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,CURRENT_TIMESTAMP)`,
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,CURRENT_TIMESTAMP)`,
             [
               venta.id,
               vendida_por,
@@ -703,7 +730,8 @@ class VentaService {
               montoPorBoleta,
               'COP',
               'CONFIRMADO',
-              boletaPagadaCompleta ? 'Pago completo' : 'Abono inicial'
+              boletaPagadaCompleta ? 'Pago completo' : 'Abono inicial',
+              linea_origen || null
             ]
           );
         }
@@ -978,7 +1006,7 @@ class VentaService {
   }
 
 
-  async registrarAbonoVenta(ventaId, monto, medioPagoId, moneda, userId, notas, boletaId = null, referencia = null) {
+  async registrarAbonoVenta(ventaId, monto, medioPagoId, moneda, userId, notas, boletaId = null, referencia = null, linea_origen = null) {
   const tx = await beginTransaction({
     usuarioId: userId,
     origen: 'ventas.registrarAbonoVenta',
@@ -1011,13 +1039,14 @@ class VentaService {
     }
 
     // 2.5) Comprobante de pago (obligatorio si NO es efectivo, único en todo el sistema)
-    const referenciaFinal = esMedioEfectivo(gatewayPagoNombre) ? null : normalizarReferencia(referencia);
-    if (!esMedioEfectivo(gatewayPagoNombre) && !referenciaFinal) {
+    const referenciaFinal = resolverReferenciaPago(gatewayPagoNombre, referencia);
+    if (requiereComprobantePago(gatewayPagoNombre) && !referenciaFinal) {
       throw new Error(`Ingresa el número de comprobante del pago por ${gatewayPagoNombre || 'este medio'}`);
     }
     if (referenciaFinal) {
       await verificarComprobanteUnico(tx, referenciaFinal);
     }
+    const lineaOrigenValidada = validarLineaOrigenAbono(linea_origen);
 
     // 3) Obtener boletas de la venta
     const boletasResult = await tx.query(
@@ -1064,10 +1093,10 @@ class VentaService {
       await tx.query(
         `INSERT INTO abonos (
           venta_id, boleta_id, monto, estado, medio_pago_id,
-          gateway_pago, referencia, moneda, registrado_por, notas, created_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP)`,
+          gateway_pago, referencia, moneda, registrado_por, notas, linea_origen, created_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP)`,
         [ventaId, boletaId, monto, 'CONFIRMADO', medioPagoId,
-         gatewayPagoNombre, referenciaFinal, moneda || 'COP', userId, notas || null]
+         gatewayPagoNombre, referenciaFinal, moneda || 'COP', userId, notas || null, lineaOrigenValidada]
       );
 
       // Actualizar estado de ESTA boleta individualmente
@@ -1106,10 +1135,10 @@ class VentaService {
         await tx.query(
           `INSERT INTO abonos (
             venta_id, boleta_id, monto, estado, medio_pago_id,
-            gateway_pago, referencia, moneda, registrado_por, notas, created_at
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP)`,
+            gateway_pago, referencia, moneda, registrado_por, notas, linea_origen, created_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP)`,
           [ventaId, boleta.id, montoPorBoleta, 'CONFIRMADO', medioPagoId,
-           gatewayPagoNombre, referenciaFinal, moneda || 'COP', userId, notas || null]
+           gatewayPagoNombre, referenciaFinal, moneda || 'COP', userId, notas || null, lineaOrigenValidada]
         );
       }
 
@@ -1187,7 +1216,7 @@ class VentaService {
 
 
 ///// ABONO MULTI-BOLETA (varias boletas en una sola transacción)
-async registrarAbonoMultiBoleta(ventaId, boletasAbono, medioPagoId, moneda, userId, notas, referencia = null) {
+async registrarAbonoMultiBoleta(ventaId, boletasAbono, medioPagoId, moneda, userId, notas, referencia = null, linea_origen = null) {
   const tx = await beginTransaction({
     usuarioId: userId,
     origen: 'ventas.registrarAbonoMultiBoleta',
@@ -1211,13 +1240,14 @@ async registrarAbonoMultiBoleta(ventaId, boletasAbono, medioPagoId, moneda, user
     }
 
     // 2.5) Comprobante de pago (obligatorio si NO es efectivo, único en todo el sistema)
-    const referenciaFinal = esMedioEfectivo(gatewayPagoNombre) ? null : normalizarReferencia(referencia);
-    if (!esMedioEfectivo(gatewayPagoNombre) && !referenciaFinal) {
+    const referenciaFinal = resolverReferenciaPago(gatewayPagoNombre, referencia);
+    if (requiereComprobantePago(gatewayPagoNombre) && !referenciaFinal) {
       throw new Error(`Ingresa el número de comprobante del pago por ${gatewayPagoNombre || 'este medio'}`);
     }
     if (referenciaFinal) {
       await verificarComprobanteUnico(tx, referenciaFinal);
     }
+    const lineaOrigenValidada = validarLineaOrigenAbono(linea_origen);
 
     // 3) Obtener boletas de la venta
     const boletasResult = await tx.query(
@@ -1259,10 +1289,10 @@ async registrarAbonoMultiBoleta(ventaId, boletasAbono, medioPagoId, moneda, user
       await tx.query(
         `INSERT INTO abonos (
           venta_id, boleta_id, monto, estado, medio_pago_id,
-          gateway_pago, referencia, moneda, registrado_por, notas, created_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP)`,
+          gateway_pago, referencia, moneda, registrado_por, notas, linea_origen, created_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP)`,
         [ventaId, boleta_id, montoNum, 'CONFIRMADO', medioPagoId,
-         gatewayPagoNombre, referenciaFinal, moneda || 'COP', userId, notas || null]
+         gatewayPagoNombre, referenciaFinal, moneda || 'COP', userId, notas || null, lineaOrigenValidada]
       );
 
       // Actualizar estado de la boleta
@@ -1522,6 +1552,7 @@ const totalPagado = abonosActivos.reduce(
       metodo_pago: abono.gateway_pago || 'N/A',
       notas: abono.notas,
       fecha: abono.created_at,
+      linea_origen: abono.linea_origen || null,
       registrado_por_nombre: abono.registrado_por_nombre || null,
     });
   }

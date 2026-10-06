@@ -77,7 +77,7 @@ const SQL_QUERIES = {
         updated_at = CURRENT_TIMESTAMP
     FROM target t
     WHERE b.id = t.id
-    RETURNING b.id, b.numero, b.estado, b.bloqueo_hasta
+    RETURNING b.id, b.numero, b.estado, b.bloqueo_hasta, b.qr_url, b.barcode, b.imagen_url, b.nota
   `,
 
   /**
@@ -164,7 +164,7 @@ const SQL_QUERIES = {
         updated_at = CURRENT_TIMESTAMP
     WHERE reserva_token = $4
       AND estado = 'RESERVADA'
-    RETURNING id, numero
+    RETURNING id, numero, estado, qr_url, barcode, imagen_url, bloqueo_hasta, nota
   `,
 
   /**
@@ -185,10 +185,17 @@ const SQL_QUERIES = {
       r.fecha_sorteo,
       r.premio_principal,
       c.nombre as cliente_nombre,
+      c.identificacion as cliente_identificacion,
       json_agg(
         json_build_object(
+          'id', b.id,
           'numero', b.numero,
-          'estado', b.estado
+          'estado', b.estado,
+          'qr_url', b.qr_url,
+          'barcode', b.barcode,
+          'imagen_url', b.imagen_url,
+          'bloqueo_hasta', b.bloqueo_hasta,
+          'nota', b.nota
         ) ORDER BY b.numero
       ) as boletas
     FROM ventas v
@@ -251,10 +258,15 @@ const SQL_QUERIES = {
       v.expires_at,
       json_agg(
         json_build_object(
+          'id', b.id,
           'numero', b.numero,
           'estado', b.estado,
           'qr_hash', b.verificacion_hash,
           'qr_url', b.qr_url,
+          'barcode', b.barcode,
+          'imagen_url', b.imagen_url,
+          'bloqueo_hasta', b.bloqueo_hasta,
+          'nota', b.nota,
           'boleta_id', b.id
         ) ORDER BY b.numero
       ) as boletas

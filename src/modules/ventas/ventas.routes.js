@@ -278,7 +278,8 @@ const registrarAbonoSchema = Joi.object({
       monto: Joi.number().positive().required()
     })
   ).optional(),
-  referencia: Joi.string().trim().max(255).optional().allow('', null)
+  referencia: Joi.string().trim().max(255).optional().allow('', null),
+  linea_origen: Joi.string().valid(...LINEAS_ORIGEN_VALIDAS).required()
 });
 
 // IMPORTANTE: Esta ruta debe estar ANTES de la ruta genérica `/:id` (importante el orden)
