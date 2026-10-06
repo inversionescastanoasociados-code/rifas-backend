@@ -24,14 +24,16 @@ const SQL_QUERIES = {
     JOIN clientes c ON c.id = v.cliente_id
     JOIN rifas r ON r.id = v.rifa_id
     LEFT JOIN boletas b ON b.venta_id = v.id
-    WHERE
-      ($1::text IS NOT NULL AND (
-        c.nombre ILIKE '%' || $1 || '%'
-        OR c.identificacion ILIKE '%' || $1 || '%'
-        OR c.telefono ILIKE '%' || $1 || '%'
-      ))
-      OR ($2::int IS NOT NULL AND b.numero = $2)
-      OR ($3::uuid IS NOT NULL AND v.id = $3)
+    WHERE r.estado = 'ACTIVA'
+      AND (
+        ($1::text IS NOT NULL AND (
+          c.nombre ILIKE '%' || $1 || '%'
+          OR c.identificacion ILIKE '%' || $1 || '%'
+          OR c.telefono ILIKE '%' || $1 || '%'
+        ))
+        OR ($2::int IS NOT NULL AND b.numero = $2)
+        OR ($3::uuid IS NOT NULL AND v.id = $3)
+      )
     ORDER BY v.created_at DESC
     LIMIT 50
   `,
@@ -65,6 +67,7 @@ const SQL_QUERIES = {
     JOIN rifas r ON r.id = v.rifa_id
     LEFT JOIN medios_pago mp ON mp.id = v.medio_pago_id
     WHERE v.id = $1
+      AND r.estado = 'ACTIVA'
   `,
 
   // Boletas de una venta con lo pagado por cada una (abonos confirmados).

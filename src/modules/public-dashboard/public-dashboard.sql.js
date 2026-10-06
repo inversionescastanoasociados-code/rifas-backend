@@ -23,6 +23,7 @@ const SQL_QUERIES = {
     JOIN rifas r ON v.rifa_id = r.id
     LEFT JOIN boletas b ON v.id = b.venta_id
     WHERE v.es_venta_online = true
+      AND r.estado = 'ACTIVA'
     GROUP BY v.id, c.id, r.id
     ORDER BY v.created_at DESC
   `,
@@ -49,7 +50,8 @@ const SQL_QUERIES = {
     JOIN clientes c ON v.cliente_id = c.id
     JOIN rifas r ON v.rifa_id = r.id
     LEFT JOIN boletas b ON v.id = b.venta_id
-    WHERE v.es_venta_online = true 
+    WHERE v.es_venta_online = true
+      AND r.estado = 'ACTIVA'
       AND (v.estado_venta = 'SIN_REVISAR' OR v.estado_venta = 'PENDIENTE' OR v.estado_venta = 'ABONADA')
     GROUP BY v.id, c.id, r.id
     ORDER BY v.created_at DESC
@@ -89,7 +91,9 @@ const SQL_QUERIES = {
     JOIN rifas r ON v.rifa_id = r.id
     LEFT JOIN boletas b ON v.id = b.venta_id
     LEFT JOIN medios_pago mp ON v.medio_pago_id = mp.id
-    WHERE v.id = $1 AND v.es_venta_online = true
+    WHERE v.id = $1
+      AND v.es_venta_online = true
+      AND r.estado = 'ACTIVA'
     GROUP BY v.id, c.id, r.id, mp.id
   `,
 
@@ -150,8 +154,9 @@ const SQL_QUERIES = {
       COALESCE(SUM(abono_total), 0) as total_abonado,
       COALESCE(SUM(monto_total), 0) as total_venta,
       COALESCE(SUM(monto_total - abono_total), 0) as saldo_pendiente_total
-    FROM ventas
-    WHERE es_venta_online = true
+    FROM ventas v
+    WHERE v.es_venta_online = true
+      AND v.rifa_id IN (SELECT id FROM rifas WHERE estado = 'ACTIVA')
   `,
 
   // OBTENER ESTADÍSTICAS POR RIFA PÚBLICA
@@ -202,7 +207,8 @@ const SQL_QUERIES = {
     JOIN clientes c ON v.cliente_id = c.id
     JOIN rifas r ON v.rifa_id = r.id
     LEFT JOIN boletas b ON v.id = b.venta_id
-    WHERE v.es_venta_online = true 
+    WHERE v.es_venta_online = true
+      AND r.estado = 'ACTIVA'
       AND v.estado_venta = 'SIN_REVISAR'
     GROUP BY v.id, c.id, r.id
     ORDER BY v.created_at DESC
@@ -240,6 +246,7 @@ const SQL_QUERIES = {
     LEFT JOIN clientes c ON b.cliente_id = c.id
     LEFT JOIN ventas v ON b.venta_id = v.id
     WHERE b.estado IN ('RESERVADA', 'ABONADA')
+      AND r.estado = 'ACTIVA'
     ORDER BY b.bloqueo_hasta ASC NULLS LAST, b.numero ASC
   `,
 
@@ -280,6 +287,7 @@ const SQL_QUERIES = {
     JOIN rifas r ON b.rifa_id = r.id
     LEFT JOIN clientes c ON c.id = b.cliente_id
     WHERE b.devolucion_en IS NOT NULL
+      AND r.estado = 'ACTIVA'
     ORDER BY disponible_publicacion DESC, b.devolucion_en DESC NULLS LAST, b.numero ASC
   `,
 
