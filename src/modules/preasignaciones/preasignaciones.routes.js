@@ -10,6 +10,11 @@ const ROLES_GESTION = ['SUPER_ADMIN', 'ADMIN', 'VENDEDOR'];
 router.use(authenticateToken);
 
 const idParamSchema = Joi.object({ id: Joi.string().uuid().required() });
+const clienteIdParamSchema = Joi.object({ clienteId: Joi.string().uuid().required() });
+
+const enviadaClienteSchema = Joi.object({
+  enviada: Joi.boolean().required(),
+});
 
 const listarQuerySchema = Joi.object({
   q: Joi.string().trim().max(100).optional().allow(''),
@@ -25,6 +30,7 @@ const actualizarSchema = Joi.object({
   cliente_id: Joi.string().uuid().optional(),
   numero_boleta: Joi.number().integer().min(0).max(9999).optional(),
   notas: Joi.string().max(500).optional().allow('', null),
+  enviada: Joi.boolean().optional(),
 }).min(1);
 
 const aplicarSchema = Joi.object({
@@ -34,6 +40,13 @@ const aplicarSchema = Joi.object({
 // ── CRUD: SUPER_ADMIN, ADMIN y VENDEDOR ──
 router.get('/', authorize(ROLES_GESTION), validateQuery(listarQuerySchema), controller.listar);
 router.post('/', authorize(ROLES_GESTION), validate(crearSchema), controller.crear);
+router.put(
+  '/cliente/:clienteId/enviada',
+  authorize(ROLES_GESTION),
+  validateParams(clienteIdParamSchema),
+  validate(enviadaClienteSchema),
+  controller.setEnviadaCliente
+);
 router.put(
   '/:id',
   authorize(ROLES_GESTION),

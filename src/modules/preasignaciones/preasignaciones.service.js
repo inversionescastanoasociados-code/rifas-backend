@@ -40,7 +40,7 @@ class PreasignacionesService {
     }
   }
 
-  async actualizar(id, { clienteId, numeroBoleta, notas }) {
+  async actualizar(id, { clienteId, numeroBoleta, notas, enviada }) {
     const actual = await query(SQL.GET_BY_ID, [id]);
     if (actual.rows.length === 0) {
       const err = new Error('Preasignación no encontrada');
@@ -63,6 +63,7 @@ class PreasignacionesService {
         clienteId || null,
         numeroBoleta ?? null,
         notas === undefined ? null : notas,
+        enviada === undefined ? null : enviada,
       ]);
       return result.rows[0];
     } catch (error) {
@@ -75,6 +76,26 @@ class PreasignacionesService {
       }
       throw error;
     }
+  }
+
+  async setEnviadaCliente(clienteId, enviada) {
+    const clienteRes = await query(SQL.CLIENTE_EXISTE, [clienteId]);
+    if (clienteRes.rows.length === 0) {
+      const err = new Error('El cliente indicado no existe');
+      err.statusCode = 404;
+      throw err;
+    }
+    const result = await query(SQL.SET_ENVIADA_CLIENTE, [clienteId, !!enviada]);
+    if (result.rows.length === 0) {
+      const err = new Error('Este cliente no tiene boletas preasignadas');
+      err.statusCode = 404;
+      throw err;
+    }
+    return {
+      cliente_id: clienteId,
+      enviada: !!enviada,
+      actualizadas: result.rows.length,
+    };
   }
 
   async eliminar(id) {

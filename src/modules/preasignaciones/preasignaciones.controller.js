@@ -34,11 +34,12 @@ class PreasignacionesController {
 
   async actualizar(req, res) {
     try {
-      const { cliente_id, numero_boleta, notas } = req.body;
+      const { cliente_id, numero_boleta, notas, enviada } = req.body;
       const data = await service.actualizar(req.params.id, {
         clienteId: cliente_id,
         numeroBoleta: numero_boleta,
         notas,
+        enviada,
       });
       res.status(200).json({ success: true, data });
     } catch (error) {
@@ -52,6 +53,16 @@ class PreasignacionesController {
       res.status(200).json({ success: true, data });
     } catch (error) {
       handleError(res, error, 'eliminar');
+    }
+  }
+
+  async setEnviadaCliente(req, res) {
+    try {
+      const { enviada } = req.body;
+      const data = await service.setEnviadaCliente(req.params.clienteId, enviada);
+      res.status(200).json({ success: true, data });
+    } catch (error) {
+      handleError(res, error, 'setEnviadaCliente');
     }
   }
 

@@ -11,6 +11,7 @@ module.exports = {
       r.nombre AS ultima_aplicacion_rifa_nombre,
       p.ultima_aplicacion_venta_id,
       p.ultima_aplicacion_en,
+      p.enviada,
       p.created_at,
       p.updated_at,
       c.nombre AS cliente_nombre,
@@ -34,7 +35,7 @@ module.exports = {
   GET_BY_ID: `
     SELECT id, cliente_id, numero_boleta, notas, creado_por,
            ultima_aplicacion_rifa_id, ultima_aplicacion_venta_id, ultima_aplicacion_en,
-           created_at, updated_at
+           enviada, created_at, updated_at
     FROM boletas_preasignadas
     WHERE id = $1
   `,
@@ -46,7 +47,7 @@ module.exports = {
   CREAR: `
     INSERT INTO boletas_preasignadas (cliente_id, numero_boleta, notas, creado_por)
     VALUES ($1, $2, $3, $4)
-    RETURNING id, cliente_id, numero_boleta, notas, creado_por, created_at, updated_at
+    RETURNING id, cliente_id, numero_boleta, notas, creado_por, enviada, created_at, updated_at
   `,
 
   ACTUALIZAR: `
@@ -54,9 +55,18 @@ module.exports = {
     SET cliente_id = COALESCE($2, cliente_id),
         numero_boleta = COALESCE($3, numero_boleta),
         notas = COALESCE($4, notas),
+        enviada = CASE WHEN $5::boolean IS NULL THEN enviada ELSE $5 END,
         updated_at = CURRENT_TIMESTAMP
     WHERE id = $1
-    RETURNING id, cliente_id, numero_boleta, notas, creado_por, created_at, updated_at
+    RETURNING id, cliente_id, numero_boleta, notas, creado_por, enviada, created_at, updated_at
+  `,
+
+  SET_ENVIADA_CLIENTE: `
+    UPDATE boletas_preasignadas
+    SET enviada = $2,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE cliente_id = $1
+    RETURNING id, cliente_id, numero_boleta, enviada
   `,
 
   ELIMINAR: `
