@@ -6,7 +6,7 @@ const logger = require('../../utils/logger');
 /**
  * Comprobante de pago (referencia_pago en ventas, referencia en abonos).
  * Reglas:
- *  - "Efectivo" y "PSE" NO requieren comprobante (se guarda como NULL).
+ *  - "Efectivo", "PSE" y "Cuenta extranjero" NO requieren comprobante (se guarda como NULL).
  *  - Otros medios (Nequi, Tarjeta, etc.) SÍ requieren número de comprobante.
  *  - El número debe ser único: no puede repetirse ni entre ventas ni entre abonos.
  */
@@ -24,8 +24,17 @@ function esMedioPSE(nombreMedioPago) {
   return (nombreMedioPago || '').trim().toLowerCase() === 'pse';
 }
 
+function esMedioCuentaExtranjero(nombreMedioPago) {
+  const n = (nombreMedioPago || '').trim().toLowerCase();
+  return n === 'cuenta extranjero' || n.includes('extranjero');
+}
+
 function requiereComprobantePago(nombreMedioPago) {
-  return !esMedioEfectivo(nombreMedioPago) && !esMedioPSE(nombreMedioPago);
+  return (
+    !esMedioEfectivo(nombreMedioPago) &&
+    !esMedioPSE(nombreMedioPago) &&
+    !esMedioCuentaExtranjero(nombreMedioPago)
+  );
 }
 
 function resolverReferenciaPago(nombreMedioPago, referenciaRaw) {

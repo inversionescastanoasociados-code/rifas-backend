@@ -240,6 +240,19 @@ async function runMigrations() {
   } catch (error) {
     logger.warn('[Migrations] Error en migración 19:', error.message);
   }
+
+  // ── Migración 20: medio Cuenta extranjero ──
+  try {
+    const sqlPath20 = path.join(
+      __dirname,
+      '../../scripts/migrations/020_medio_pago_cuenta_extranjero.sql'
+    );
+    const migrationSql20 = fs.readFileSync(sqlPath20, 'utf8');
+    await pool.query(migrationSql20);
+    logger.info('[Migrations] medios_pago Cuenta extranjero verificado');
+  } catch (error) {
+    logger.warn('[Migrations] Error en migración 20:', error.message);
+  }
 }
 
 module.exports = { runMigrations };

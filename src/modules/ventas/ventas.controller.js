@@ -538,6 +538,7 @@ async registrarAbono(req, res) {
       efectivo: 'd397d917-c0d0-4c61-b2b3-2ebfab7deeb7',      // Efectivo
       nequi: 'af6e15fc-c52c-4491-abe1-20243af301c4',        // Nequi
       transferencia: 'db94562d-bb01-42a3-9414-6e369a1a70ba', // PSE
+      cuenta_extranjero: 'c8f4e2a1-9b3d-4e7f-8c6d-5a4b3c2d1e0f', // Cuenta extranjero
       daviplata: 'af6e15fc-c52c-4491-abe1-20243af301c4',   // Sin Daviplata en BD → Nequi
       otro: 'd397d917-c0d0-4c61-b2b3-2ebfab7deeb7'         // Otro → Efectivo
     };
