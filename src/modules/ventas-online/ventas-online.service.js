@@ -293,19 +293,13 @@ class VentasOnlineService {
       // Expiración: el DÍA DEL SORTEO a las 23:59:59 hora Colombia (UTC-5)
       // fecha_sorteo es TIMESTAMPTZ (ej: 2026-06-21T04:50:00Z = 20/06/2026 23:50 COT)
       // Extraemos el día en hora Colombia y ponemos 23:59:59 COT de ese día
-      let expiresAt;
-      if (rifaResult.rows[0].fecha_sorteo) {
-        const sorteoUTC = new Date(rifaResult.rows[0].fecha_sorteo);
-        // Convertir a hora Colombia (UTC-5): sumar offset para obtener el día local
-        const sorteoColombiaMs = sorteoUTC.getTime() - (5 * 60 * 60 * 1000);
-        const sorteoColombia = new Date(sorteoColombiaMs);
-        // Extraer año, mes, día en hora Colombia
-        const year = sorteoColombia.getUTCFullYear();
-        const month = sorteoColombia.getUTCMonth(); // 0-based
-        const day = sorteoColombia.getUTCDate();
-        // Construir: ese día a las 23:59:59 hora Colombia = +5h en UTC = día siguiente 04:59:59 UTC
-        expiresAt = new Date(Date.UTC(year, month, day + 1, 4, 59, 59, 0));
-      } else {
+      const {
+        calcularBloqueoHastaReserva,
+        esRifaProyecto3,
+      } = require('../../utils/rifaBloqueoHasta');
+      const rifaRow = rifaResult.rows[0];
+      let expiresAt = calcularBloqueoHastaReserva(rifaRow, { dias_bloqueo: 3 });
+      if (!rifaRow.fecha_sorteo && !esRifaProyecto3(rifaRow)) {
         expiresAt = new Date();
         expiresAt.setHours(expiresAt.getHours() + RESERVA_EXPIRACION_HORAS);
       }

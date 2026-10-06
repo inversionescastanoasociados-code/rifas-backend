@@ -6,14 +6,26 @@ const SQL_QUERIES = {
   `,
   
   GET_ALL_RIFAS: `
-    SELECT r.*, u.nombre as creador_nombre
+    SELECT r.*, u.nombre as creador_nombre,
+      COALESCE(
+        r.imagen_url,
+        (SELECT b.imagen_url FROM boletas b
+         WHERE b.rifa_id = r.id AND b.imagen_url IS NOT NULL AND BTRIM(b.imagen_url) <> ''
+         LIMIT 1)
+      ) AS imagen_url
     FROM rifas r
     LEFT JOIN usuarios u ON r.creado_por = u.id
     ORDER BY r.created_at DESC
   `,
   
   GET_ALL_RIFAS_BY_ESTADO: `
-    SELECT r.*, u.nombre as creador_nombre
+    SELECT r.*, u.nombre as creador_nombre,
+      COALESCE(
+        r.imagen_url,
+        (SELECT b.imagen_url FROM boletas b
+         WHERE b.rifa_id = r.id AND b.imagen_url IS NOT NULL AND BTRIM(b.imagen_url) <> ''
+         LIMIT 1)
+      ) AS imagen_url
     FROM rifas r
     LEFT JOIN usuarios u ON r.creado_por = u.id
     WHERE r.estado = $1
@@ -21,10 +33,28 @@ const SQL_QUERIES = {
   `,
   
   GET_RIFA_BY_ID: `
-    SELECT r.*, u.nombre as creador_nombre
+    SELECT r.*, u.nombre as creador_nombre,
+      COALESCE(
+        r.imagen_url,
+        (SELECT b.imagen_url FROM boletas b
+         WHERE b.rifa_id = r.id AND b.imagen_url IS NOT NULL AND BTRIM(b.imagen_url) <> ''
+         LIMIT 1)
+      ) AS imagen_url
     FROM rifas r
     LEFT JOIN usuarios u ON r.creado_por = u.id
     WHERE r.id = $1
+  `,
+
+  UPDATE_RIFA_IMAGEN: `
+    UPDATE rifas
+    SET imagen_url = $1, updated_at = CURRENT_TIMESTAMP
+    WHERE id = $2
+  `,
+
+  UPDATE_BOLETAS_IMAGEN_BY_RIFA: `
+    UPDATE boletas
+    SET imagen_url = $1, updated_at = CURRENT_TIMESTAMP
+    WHERE rifa_id = $2
   `,
   
   UPDATE_RIFA: `

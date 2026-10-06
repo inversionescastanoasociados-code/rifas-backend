@@ -118,16 +118,11 @@ class PreasignacionesService {
         throw err;
       }
 
-      let bloqueoHasta = null;
-      if (rifa.fecha_sorteo) {
-        const sorteoUTC = new Date(rifa.fecha_sorteo);
-        const sorteoColombiaMs = sorteoUTC.getTime() - 5 * 60 * 60 * 1000;
-        const sorteoColombia = new Date(sorteoColombiaMs);
-        const year = sorteoColombia.getUTCFullYear();
-        const month = sorteoColombia.getUTCMonth();
-        const day = sorteoColombia.getUTCDate();
-        bloqueoHasta = new Date(Date.UTC(year, month, day + 1, 4, 59, 59, 0));
-      }
+      const { calcularBloqueoHastaReserva, esRifaProyecto3 } = require('../../utils/rifaBloqueoHasta');
+      const bloqueoHasta =
+        rifa.fecha_sorteo || esRifaProyecto3(rifa)
+          ? calcularBloqueoHastaReserva(rifa, { dias_bloqueo: 3 })
+          : null;
 
       const preasignaciones = await tx.query(SQL.LISTAR_TODAS_PARA_APLICAR);
 

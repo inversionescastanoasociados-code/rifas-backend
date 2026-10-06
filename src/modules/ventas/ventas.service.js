@@ -158,7 +158,6 @@ class VentaService {
 
     // 🔹 3️⃣ Validar boletas
     const boletasReservadas = [];
-    const tiempoBloqueoMinutos = dias_bloqueo * 24 * 60;
 
     for (const boletaId of boletas) {
       const boletaCheck = await tx.query(
@@ -216,25 +215,9 @@ class VentaService {
 
     const venta = ventaResult.rows[0];
 
-    // 🔹 6️⃣ Bloquear boletas
-    // Calcular bloqueo_hasta usando fecha_sorteo de la rifa (si existe)
-    // La reserva es válida hasta el día del sorteo a las 23:59:59 hora Colombia (UTC-5)
-    let bloqueoHasta;
-    if (rifa.fecha_sorteo) {
-      const sorteoUTC = new Date(rifa.fecha_sorteo);
-      // Convertir a hora Colombia (UTC-5) para extraer el día del sorteo
-      const sorteoColombiaMs = sorteoUTC.getTime() - (5 * 60 * 60 * 1000);
-      const sorteoColombia = new Date(sorteoColombiaMs);
-      const year = sorteoColombia.getUTCFullYear();
-      const month = sorteoColombia.getUTCMonth();
-      const day = sorteoColombia.getUTCDate();
-      // Día del sorteo a las 23:59:59 hora Colombia = día+1 04:59:59 UTC
-      bloqueoHasta = new Date(Date.UTC(year, month, day + 1, 4, 59, 59, 0));
-    } else {
-      // Fallback: usar dias_bloqueo si no hay fecha_sorteo
-      bloqueoHasta = new Date();
-      bloqueoHasta.setMinutes(bloqueoHasta.getMinutes() + tiempoBloqueoMinutos);
-    }
+    // 🔹 6️⃣ Bloquear boletas (Proyecto 3 → 23-dic-2026; resto → día del sorteo o dias_bloqueo)
+    const { calcularBloqueoHastaReserva } = require('../../utils/rifaBloqueoHasta');
+    const bloqueoHasta = calcularBloqueoHastaReserva(rifa, { dias_bloqueo });
 
     for (const boletaInfo of boletasReservadas) {
       const reservaToken = require('crypto')

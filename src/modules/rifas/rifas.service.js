@@ -90,7 +90,8 @@ class RifaService {
         descripcion,
         precio_boleta,
         fecha_sorteo,
-        estado
+        estado,
+        imagen_url: imagenUrlRaw,
       } = rifaData;
 
       const result = await query(SQL_QUERIES.UPDATE_RIFA, [
@@ -106,14 +107,28 @@ class RifaService {
         throw new Error('Rifa not found');
       }
 
+      if (Object.prototype.hasOwnProperty.call(rifaData, 'imagen_url')) {
+        const imagenUrl =
+          imagenUrlRaw && String(imagenUrlRaw).trim() ? String(imagenUrlRaw).trim() : null;
+        await query(SQL_QUERIES.UPDATE_RIFA_IMAGEN, [imagenUrl, id]);
+        const boletasUpd = await query(SQL_QUERIES.UPDATE_BOLETAS_IMAGEN_BY_RIFA, [
+          imagenUrl,
+          id,
+        ]);
+        logger.info(
+          `Rifa ${id} imagen actualizada; boletas actualizadas: ${boletasUpd.rowCount}`
+        );
+      }
+
       // Si cambió el estado, invalidar la caché de pausa para que el bloqueo
       // (o su reactivación) aplique de inmediato.
       if (estado) {
         invalidarCachePausa();
       }
 
+      const refreshed = await query(SQL_QUERIES.GET_RIFA_BY_ID, [id]);
       logger.info(`Rifa updated: ${id}`);
-      return result.rows[0];
+      return refreshed.rows[0] || result.rows[0];
     } catch (error) {
       logger.error(`Error updating rifa ${id}:`, error);
       throw error;

@@ -20,7 +20,8 @@ const updateRifaSchema = Joi.object({
   descripcion: Joi.string().min(10).max(1000),
   precio_boleta: Joi.number().positive(),
   fecha_sorteo: Joi.date().iso().greater('now'),
-  estado: Joi.string().valid('BORRADOR', 'ACTIVA', 'PAUSADA', 'TERMINADA')
+  estado: Joi.string().valid('BORRADOR', 'ACTIVA', 'PAUSADA', 'TERMINADA'),
+  imagen_url: Joi.string().uri().optional().allow(null, ''),
 }).min(1);
 
 const generateBoletasSchema = Joi.object({
