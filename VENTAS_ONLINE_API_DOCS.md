@@ -350,11 +350,11 @@ x-api-key: pk_4f9a8c7e2d1b6a9f3c0d5e7f8a2b4c6d
     "precio_boleta": 120000,
     "cliente_nombre": "Juan Carlos Pérez",
     "expires_at": "2026-03-01T05:32:56.894Z",
-    "mensaje": "Reserva creada exitosamente. Tiene 72 horas para enviar su comprobante de pago. Un administrador revisará y aprobará su compra.",
+    "mensaje": "Reserva creada exitosamente. Anticipado 14 de noviembre (Hyundai i10 0 km 2027): mínimo $80.000 abonados por boleta. Premio mayor 26 de diciembre: Camión FVR 0 km 2027 + rumba navideña ($10 millones). Boleta al 100% para el premio mayor.",
     "instrucciones": [
       "Envíe su comprobante de pago al administrador.",
       "Su reserva será revisada y confirmada.",
-      "Si no se confirma el pago en 72 horas, las boletas se liberarán automáticamente.",
+      "Su reserva es válida hasta el día del sorteo.",
       "Puede consultar el estado de su reserva con el token proporcionado."
     ]
   }

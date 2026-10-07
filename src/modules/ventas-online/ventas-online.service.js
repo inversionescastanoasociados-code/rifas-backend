@@ -365,7 +365,7 @@ class VentasOnlineService {
         cliente_nombre: cliente.nombre.trim(),
         cliente_identificacion: cliente.identificacion ? cliente.identificacion.trim() : null,
         expires_at: expiresAt,
-        mensaje: `Reserva creada exitosamente. Para participar en los premios anticipados: mínimo $90.000 abonados todos los sábados por $2.000.000 acumulables. Premio mayor el 20 de junio: boleta pagada al 100%.`,
+        mensaje: require('../../config/rifaPromoMensajes').MENSAJE_RESERVA_ONLINE_CORTO,
         instrucciones: [
           'Envíe su comprobante de pago al administrador.',
           'Su reserva será revisada y confirmada.',
